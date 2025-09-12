@@ -3,7 +3,7 @@ package org.dao.device.lift.jinbo
 import io.javalin.http.Context
 import org.slf4j.LoggerFactory
 
-object JinBoLiftHandler {
+object JinBoHandler {
   private val logger = LoggerFactory.getLogger(javaClass)
 
   fun request(ctx: Context) {
@@ -11,7 +11,7 @@ object JinBoLiftHandler {
     val req = ctx.bodyAsClass(JinBoReq::class.java)
     logger.info("list request, lift: $liftId, request: $req")
 
-    val resp = JinBoLiftServer.request(liftId, req)
+    val resp = JinBoServer.request(liftId, req)
     ctx.json(resp)
   }
 
@@ -19,7 +19,7 @@ object JinBoLiftHandler {
     val liftId = ctx.pathParam("liftId")
     logger.info("lift close, lift: $liftId")
 
-    val resp = JinBoLiftServer.close(liftId)
+    val resp = JinBoServer.close(liftId)
     ctx.json(resp)
   }
 
@@ -27,7 +27,7 @@ object JinBoLiftHandler {
     val liftId = ctx.pathParam("liftId")
     logger.info("lift status, lift: $liftId")
 
-    val resp = JinBoLiftServer.status(liftId)
+    val resp = JinBoServer.status(liftId)
     ctx.json(resp)
   }
 }

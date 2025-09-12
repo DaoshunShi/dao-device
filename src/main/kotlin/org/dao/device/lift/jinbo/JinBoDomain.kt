@@ -1,10 +1,11 @@
 package org.dao.device.lift.jinbo
 
+import com.fasterxml.jackson.annotation.JsonIgnore
 import java.util.Date
 import java.util.concurrent.CopyOnWriteArrayList
 
 data class JinBoConfig(
-  val id: Int, // 配置类型
+  val id: String, // 电梯 ID
   val floors: List<JinBoFloor>, // 楼层配置。注意：严格按照 index 顺序
   val liftSpeed: Double, // 上下/下降速度，点位 m/s
   val costDoorOp: Int, // 开门关门需要的时间，单位：ms
@@ -15,15 +16,18 @@ data class JinBoFloor(
   val index: Int, // 楼层索引
   val label: String, // 标签，比如 G、L1、F2 等
   val height: Double, // 楼层高度
-  val disabled: Boolean, // 此层电梯停用
+  val disabled: Boolean = false, // 此层电梯停用
 )
 
 /**
  * 电梯运行记录
  */
-data class JinBoRuntime(val config: JinBoConfig) {
-  @Volatile
-  var disabled = false // 电梯停用
+data class JinBoRuntime(
+  @JsonIgnore
+  val config: JinBoConfig,
+) {
+  // @Volatile
+  // var disabled = false // 电梯停用
 
   @Volatile
   var curFloor: Int = 0 // 当前楼层。电梯从 1 层开始，0 是一个合适的默认值
@@ -35,7 +39,7 @@ data class JinBoRuntime(val config: JinBoConfig) {
   var lifting: Boolean = false // 上升、下降中
 
   @Volatile
-  var doorStatus: JinBoDoorStatus = JinBoDoorStatus.ERROR // 当前楼层门状态
+  var doorStatus: JinBoDoorStatus = JinBoDoorStatus.CLOSE // 当前楼层门状态
 
   val reqs: MutableList<JinBoReq> = CopyOnWriteArrayList() // 当前电梯的请求
 
