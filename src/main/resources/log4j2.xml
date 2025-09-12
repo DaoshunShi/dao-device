@@ -1,0 +1,61 @@
+<?xml version="1.0" encoding="UTF-8"?>
+<Configuration status="WARN">
+  <Properties>
+    <Property name="LOG_PATTERN">%d{yyyy-MM-dd HH:mm:ss.SSS} [%t] %-5level %logger{36} - %msg%n</Property>
+    <Property name="APP_LOG_ROOT">logs</Property>
+  </Properties>
+
+  <Appenders>
+    <!-- 控制台输出 -->
+    <Console name="Console" target="SYSTEM_OUT">
+      <PatternLayout>
+        <!-- 控制台日志只打时间，不打日期 -->
+        <Pattern>%d{HH:mm:ss.SSS} %highlight{${LOG_LEVEL_PATTERN:-%5p}}{FATAL=red, ERROR=red, WARN=yellow,
+          INFO=green, DEBUG=green, TRACE=green} --- [%15.15t] %logger{1} - %m%n%ex
+        </Pattern>
+      </PatternLayout>
+    </Console>
+
+    <!-- 文件输出 - 应用日志 -->
+    <RollingFile name="AppLog"
+                 fileName="${APP_LOG_ROOT}/device.log"
+                 filePattern="${APP_LOG_ROOT}/device-%d{yyyy-MM-dd}-%i.log">
+      <PatternLayout pattern="${LOG_PATTERN}"/>
+      <Policies>
+        <TimeBasedTriggeringPolicy interval="1" modulate="true"/>
+        <SizeBasedTriggeringPolicy size="10MB"/>
+      </Policies>
+      <DefaultRolloverStrategy max="10"/>
+    </RollingFile>
+
+    <!-- 文件输出 - 错误日志 -->
+    <RollingFile name="ErrorLog"
+                 fileName="${APP_LOG_ROOT}/device-error.log"
+                 filePattern="${APP_LOG_ROOT}/device-error-%d{yyyy-MM-dd}-%i.log">
+      <PatternLayout pattern="${LOG_PATTERN}"/>
+      <Policies>
+        <TimeBasedTriggeringPolicy interval="1" modulate="true"/>
+        <SizeBasedTriggeringPolicy size="10MB"/>
+      </Policies>
+      <DefaultRolloverStrategy max="10"/>
+      <Filters>
+        <ThresholdFilter level="ERROR" onMatch="ACCEPT" onMismatch="DENY"/>
+      </Filters>
+    </RollingFile>
+  </Appenders>
+
+  <Loggers>
+    <!-- 应用程序日志配置 -->
+    <Logger name="org.dao" level="DEBUG" additivity="false">
+      <AppenderRef ref="Console"/>
+      <AppenderRef ref="AppLog"/>
+<!--      <AppenderRef ref="ErrorLog"/>-->
+    </Logger>
+
+    <!-- 根日志配置 -->
+<!--    <Root level="INFO">-->
+<!--      <AppenderRef ref="Console"/>-->
+<!--      <AppenderRef ref="AppLog"/>-->
+<!--    </Root>-->
+  </Loggers>
+</Configuration>
