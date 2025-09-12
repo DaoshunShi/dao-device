@@ -1,6 +1,7 @@
 package org.dao.device.lift.jinbo
 
 import org.dao.device.common.JsonHelper
+import org.dao.device.lift.jinbo.gui.LiftFrame
 import org.slf4j.LoggerFactory
 import java.util.Date
 import java.util.concurrent.ConcurrentHashMap
@@ -37,7 +38,7 @@ object JinBoServer {
   private val executor: ExecutorService = Executors.newSingleThreadExecutor()
   private var worker: Future<*>? = null
 
-  private val lifts: MutableMap<String, JinBoRuntime> = ConcurrentHashMap()
+  val lifts: MutableMap<String, JinBoRuntime> = ConcurrentHashMap()
 
   private const val STEP_DURATION = 1 // 电梯移动的最小时间单位，秒
 
@@ -48,6 +49,9 @@ object JinBoServer {
     lifts.putAll(JinBoRepo.load())
 
     worker = executor.submit { process() }
+
+    val frame = LiftFrame()
+    frame.isVisible = true
   }
 
   fun dispose() {
@@ -250,6 +254,8 @@ object JinBoServer {
     val lift = mustGetLift(liftId)
     return JinBoStatusResp.of(lift)
   }
+
+  fun getLifts(): List<JinBoRuntime> = lifts.values.toList()
 
   private fun mustGetLift(liftId: String): JinBoRuntime = lifts[liftId] ?: throw RuntimeException("$liftId 电梯不存在")
 
