@@ -1,0 +1,8 @@
+### 呼叫电梯
+POST http://localhost:7070/api/lift/A/request
+Content-Type: application/json
+
+{
+ "destFloor": 2
+}
+
