@@ -14,7 +14,7 @@ object JinBoFetcher {
       LiftEvent(
         "outside",
         JsonHelper.mapper.writeValueAsString(
-          lr.reqs, // .filter { it.source == JinBoReqSource.OutDoor },
+          lr.reqs.filter { it.source == JinBoReqSource.OutDoor },
         ),
       ),
     )
@@ -24,7 +24,8 @@ object JinBoFetcher {
         JsonHelper.mapper.writeValueAsString(
           mapOf(
             "h" to lr.h / 12.0, // TODO 最高楼层的高度
-            "o" to (lr.doorStatus in listOf(JinBoDoorStatus.OPEN, JinBoDoorStatus.OPENING, JinBoDoorStatus.CLOSING)),
+            // "o" to (lr.doorStatus in listOf(JinBoDoorStatus.OPEN, JinBoDoorStatus.OPENING, JinBoDoorStatus.CLOSING)),
+            "status" to lr.doorStatus,
           ),
         ),
       ),
@@ -33,6 +34,14 @@ object JinBoFetcher {
     JinBoEventBus.fire(
       LiftEvent(
         "inside",
+        JsonHelper.mapper.writeValueAsString(
+          lr.reqs.filter { it.source == JinBoReqSource.InDoor },
+        ),
+      ),
+    )
+    JinBoEventBus.fire(
+      LiftEvent(
+        "all",
         JsonHelper.mapper.writeValueAsString(
           lr.reqs, // .filter { it.source == JinBoReqSource.InDoor },
         ),

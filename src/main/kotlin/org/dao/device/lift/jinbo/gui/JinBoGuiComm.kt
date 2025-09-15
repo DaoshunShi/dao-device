@@ -2,6 +2,7 @@ package org.dao.device.lift.jinbo.gui
 
 import com.fasterxml.jackson.module.kotlin.jacksonTypeRef
 import org.dao.device.common.JsonHelper
+import org.dao.device.lift.jinbo.JinBoDoorStatus
 import org.dao.device.lift.jinbo.JinBoLiftStatus
 import org.dao.device.lift.jinbo.JinBoReq
 import org.dao.device.lift.jinbo.JinBoReqSource
@@ -23,12 +24,15 @@ data class LiftEvent(val topic: String, val msg: String)
 class LiftAndDoor(
   val lw: Int, // 梯厢宽度
   val lh: Int, // 梯厢高度
+  val floorNo: Int, // 楼层数量
   h0: Double, // 电梯底部当前高度
-  o0: Boolean, // 电梯是开着的
+  status0: JinBoDoorStatus, // 电梯是开着的
 ) : JPanel(),
   GuiEventListener {
   private var h = round(h0 * height).toInt()
-  private var o = o0
+
+  // private var o = o0
+  private var status = status0
 
   init {
     JinBoEventBus.listener += this
@@ -44,22 +48,52 @@ class LiftAndDoor(
     val centerX = width / 2
 
     // 绘制电梯
-    g2d.color = Color.BLACK
-    g2d.drawRect(centerX - lw / 2, height - lh - h, lw, lh)
-    g2d.color = if (o) Color.GREEN else Color.LIGHT_GRAY
-    g2d.fillRect(centerX - lw / 2, height - lh - h, lw, lh)
-
     // 绘制门
-    if (o) {
-      // 开着的
-      g2d.color = Color.BLACK
-      g2d.drawRect(centerX - lw, height - lh - h, lw / 2, lh)
-      g2d.drawRect(centerX + lw / 2, height - lh - h, lw / 2, lh)
-    } else {
-      // 关着的
-      g2d.color = Color.BLACK
-      g2d.drawRect(centerX - lw / 2, height - lh - h, lw / 2, lh)
-      g2d.drawRect(centerX, height - lh - h, lw / 2, lh)
+    when (status) {
+      JinBoDoorStatus.OPENING -> {
+        g2d.color = Color.lightGray
+        g2d.fillRect(centerX - lw / 2, height - lh - h, lw, lh)
+
+        g2d.color = Color.LIGHT_GRAY
+        g2d.drawRect(centerX - lw, height - lh - h, lw / 2, lh)
+        g2d.drawRect(centerX + lw / 2, height - lh - h, lw / 2, lh)
+      }
+
+      JinBoDoorStatus.OPEN -> {
+        g2d.color = Color.GREEN
+        g2d.fillRect(centerX - lw / 2, height - lh - h, lw, lh)
+
+        g2d.color = Color.DARK_GRAY
+        g2d.drawRect(centerX - lw, height - lh - h, lw / 2, lh)
+        g2d.drawRect(centerX + lw / 2, height - lh - h, lw / 2, lh)
+      }
+
+      JinBoDoorStatus.CLOSING -> {
+        g2d.color = Color.YELLOW
+        g2d.fillRect(centerX - lw / 2, height - lh - h, lw, lh)
+
+        g2d.color = Color.LIGHT_GRAY
+        g2d.drawRect(centerX - lw, height - lh - h, lw / 2, lh)
+        g2d.drawRect(centerX + lw / 2, height - lh - h, lw / 2, lh)
+      }
+
+      JinBoDoorStatus.CLOSE -> {
+        g2d.color = Color.ORANGE
+        g2d.fillRect(centerX - lw / 2, height - lh - h, lw, lh)
+
+        g2d.color = Color.LIGHT_GRAY
+        g2d.drawRect(centerX - lw / 2, height - lh - h, lw / 2, lh)
+        g2d.drawRect(centerX, height - lh - h, lw / 2, lh)
+      }
+
+      JinBoDoorStatus.ERROR -> {
+        g2d.color = Color.DARK_GRAY
+        g2d.fillRect(centerX - lw / 2, height - lh - h, lw, lh)
+
+        g2d.color = Color.RED
+        g2d.drawRect(centerX - lw / 2, height - lh - h, lw / 2, lh)
+        g2d.drawRect(centerX, height - lh - h, lw / 2, lh)
+      }
     }
 
     // 绘制一条线：上边
@@ -67,14 +101,22 @@ class LiftAndDoor(
     g2d.drawLine(centerX, 0, centerX, height - lh - h)
 
     // 绘制一条线：下边
-    g2d.drawLine(centerX, h, centerX, height)
+    g2d.drawLine(centerX, height - h, centerX, height)
+
+    // 绘制楼层线条：
+    val floorHeight = height / floorNo
+    var ch = 0
+    repeat(floorNo) {
+      g2d.drawLine(0, ch, width, ch)
+      ch += floorHeight
+    }
   }
 
   override fun onEvent(event: LiftEvent) {
     if (event.topic == "liftState") {
       val map: Map<String, Any> = JsonHelper.mapper.readValue(event.msg, jacksonTypeRef())
       h = round(height * (map["h"] as Double)).toInt()
-      o = map["o"] as Boolean
+      status = JinBoDoorStatus.valueOf(map["status"] as String)
       repaint()
     }
   }
@@ -326,6 +368,84 @@ class LabelCircle(val floorIdx: Int, val labelStr: String, val circleR: Int, val
 
   override fun onEvent(event: LiftEvent) {
     if (event.topic == "inside") {
+      val list: List<JinBoReq> = JsonHelper.mapper.readValue(event.msg, jacksonTypeRef())
+      active = list.any { it.destFloor == floorIdx }
+      repaint()
+    }
+  }
+}
+
+/**
+ * 圆形内套文本，用于电梯内去指定楼层
+ */
+class LabelCircle2(val floorIdx: Int, val labelStr: String, val circleR: Int, val labelSize: Int) :
+  JPanel(),
+  GuiEventListener {
+
+  private var active = false
+
+  init {
+    addMouseListener(object : MouseAdapter() {
+      override fun mouseClicked(e: MouseEvent) {
+        println("Clicked on LabelCircle")
+        active = !active
+
+        JinBoServer.request("A", JinBoReq(floorIdx, JinBoReqSource.InDoor))
+
+        repaint()
+      }
+    })
+
+    JinBoEventBus.listener += this
+  }
+
+  override fun paintComponent(g: Graphics) {
+    val g2d = g as Graphics2D
+
+    // 启用抗锯齿
+    g2d.setRenderingHint(RenderingHints.KEY_ANTIALIASING, RenderingHints.VALUE_ANTIALIAS_ON)
+
+    val centerX = width / 2
+    val centerY = height / 2
+
+    // 绘制圆圈
+    g2d.color = if (active) Color.BLUE else Color.gray
+    g2d.stroke = BasicStroke(3.0f)
+    g2d.drawOval(centerX - circleR, centerY - circleR, circleR * 2, circleR * 2)
+    if (active) {
+      g2d.color = Color.ORANGE
+      g2d.fillOval(centerX - circleR, centerY - circleR, circleR * 2, circleR * 2)
+    }
+
+    // 绘制文本
+    g2d.color = if (active) Color.WHITE else Color.DARK_GRAY
+    g2d.font = Font("Arial", Font.PLAIN, labelSize)
+    val fontMetrics = g2d.fontMetrics
+    val textWidth = fontMetrics.stringWidth(labelStr)
+    val textHeight = fontMetrics.height
+    g2d.drawString(labelStr, (width - textWidth) / 2, (height - textHeight) / 2 + fontMetrics.ascent)
+  }
+
+  /**
+   * 创建三角形
+   * 顺时针转的
+   */
+  private fun createTriangle(centerX: Int, centerY: Int, size: Int, rotation: Double): Polygon {
+    val xPoints = IntArray(3)
+    val yPoints = IntArray(3)
+
+    // 计算三角形的三个顶点
+    for (i in 0 until 3) {
+      val angle = rotation + 2 * PI * i / 3
+      xPoints[i] = (centerX + size * cos(angle)).toInt()
+      yPoints[i] = (centerY + size * sin(angle)).toInt()
+    }
+
+    return Polygon(xPoints, yPoints, 3)
+  }
+
+  override fun onEvent(event: LiftEvent) {
+    if (event.topic == "all") {
       val list: List<JinBoReq> = JsonHelper.mapper.readValue(event.msg, jacksonTypeRef())
       active = list.any { it.destFloor == floorIdx }
       repaint()

@@ -3,7 +3,7 @@ package org.dao.device.lift.jinbo
 import org.dao.device.common.JsonHelper
 import org.dao.device.lift.jinbo.gui.LiftFrame
 import org.slf4j.LoggerFactory
-import java.util.Date
+import java.util.*
 import java.util.concurrent.ConcurrentHashMap
 import java.util.concurrent.ExecutorService
 import java.util.concurrent.Executors
@@ -76,7 +76,7 @@ object JinBoServer {
       logAll()
 
       // 清理原本的任务
-      cleanCurrentFloorReq(lr)
+      // cleanCurrentFloorReq(lr)
 
       // 选择更优的任务
       selectBetterReq(lr)
@@ -100,7 +100,7 @@ object JinBoServer {
       // - tcp 请求：TODO 暂定同内部请求
       lr.reqs.removeIf {
         it.destFloor == lr.curFloor &&
-          (it.source != JinBoReqSource.OutDoor || it.type == lr.liftStatus)
+          (it.source != JinBoReqSource.OutDoor || it.type == lr.liftStatus || lr.liftStatus == JinBoLiftStatus.Idle)
       }
     }
   }
@@ -112,8 +112,12 @@ object JinBoServer {
     // 运行中的电梯，只能选路上的电梯
     lr.targetFloor =
       when (lr.liftStatus) {
-        JinBoLiftStatus.Up -> lr.reqs.filter { it.destFloor >= lr.curFloor }.minByOrNull { it.destFloor }
-        JinBoLiftStatus.Down -> lr.reqs.filter { it.destFloor <= lr.curFloor }.maxByOrNull { it.destFloor }
+        JinBoLiftStatus.Up -> lr.reqs.filter {
+          it.destFloor > lr.curFloor || (it.destFloor == lr.curFloor && lr.infloor())
+        }.minByOrNull { it.destFloor }
+        JinBoLiftStatus.Down -> lr.reqs.filter {
+          it.destFloor < lr.curFloor || (it.destFloor == lr.curFloor && lr.infloor())
+        }.maxByOrNull { it.destFloor }
         JinBoLiftStatus.Idle -> lr.reqs.minByOrNull { it.destFloor - lr.curFloor }
       }?.destFloor
     if (lr.targetFloor != null) {
@@ -125,6 +129,7 @@ object JinBoServer {
         JinBoLiftStatus.Idle
       }
     }
+
     if (lr.targetFloor == null) {
       lr.liftStatus = JinBoLiftStatus.Idle
       lr.lifting = false
@@ -135,19 +140,33 @@ object JinBoServer {
    * 电梯移动
    */
   private fun liftStep(lr: JinBoRuntime) {
+    if (lr.doorStatus != JinBoDoorStatus.CLOSE) return
+
     val stepH = lr.config.liftSpeed * STEP_DURATION
     val tf = lr.config.floors.firstOrNull { it.index == lr.targetFloor } ?: return // 找不到，就不升降
 
-    if (lr.h + stepH >= tf.height) {
-      lr.h = tf.height
-    } else {
-      lr.h += stepH
-    }
-
     when (lr.liftStatus) {
-      JinBoLiftStatus.Up -> lr.config.floors.lastOrNull { it.height <= lr.h }?.index?.let { lr.curFloor = it }
-      JinBoLiftStatus.Down -> lr.config.floors.firstOrNull { it.height >= lr.h }?.index?.let { lr.curFloor = it }
-      else -> lr.curFloor = lr.config.floors.minBy { abs(it.height - lr.h) }.index
+      JinBoLiftStatus.Up -> {
+        if (lr.h + stepH >= tf.height) {
+          lr.h = tf.height
+        } else {
+          lr.h += stepH
+        }
+        lr.config.floors.lastOrNull { it.height <= lr.h }?.index?.let { lr.curFloor = it }
+      }
+
+      JinBoLiftStatus.Down -> {
+        if (lr.h - stepH <= tf.height) {
+          lr.h = tf.height
+        } else {
+          lr.h -= stepH
+        }
+        lr.config.floors.firstOrNull { it.height >= lr.h }?.index?.let { lr.curFloor = it }
+      }
+
+      else -> {
+        lr.curFloor = lr.config.floors.minBy { abs(it.height - lr.h) }.index
+      }
     }
   }
 
@@ -169,6 +188,14 @@ object JinBoServer {
     if (lr.lifting) {
       logger.warn("电梯正在运行，不能开门")
       return false
+    } else if (lr.doorStatus == JinBoDoorStatus.OPENING) {
+      // lr.doorOpDoneOn = null
+      // lr.doorOpStartOn = Date()
+      return true
+    } else if (lr.doorStatus == JinBoDoorStatus.OPEN) {
+      lr.doorOpDoneOn = Date()
+      lr.doorOpStartOn = null
+      return true
     } else {
       lr.doorStatus = JinBoDoorStatus.OPENING
       lr.doorOpDoneOn = null

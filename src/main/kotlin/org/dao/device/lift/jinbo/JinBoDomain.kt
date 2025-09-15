@@ -60,6 +60,11 @@ data class JinBoRuntime(
    * 电梯允许上下行
    */
   fun canLifting(): Boolean = doorStatus != JinBoDoorStatus.CLOSE
+
+  /**
+   * 正好在楼层里，可以开关门
+   */
+  fun infloor(): Boolean = config.floors.any { it.height == h }
 }
 
 /**

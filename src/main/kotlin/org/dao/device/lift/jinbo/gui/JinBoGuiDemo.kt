@@ -1,5 +1,7 @@
 package org.dao.device.lift.jinbo.gui
 
+import org.dao.device.lift.jinbo.JinBoDoorStatus
+import org.dao.device.lift.jinbo.JinBoServer
 import java.awt.*
 import javax.swing.BorderFactory
 import javax.swing.JButton
@@ -27,7 +29,7 @@ class LiftFrame : JFrame("JinBo Lift Monitor") {
 
   init {
     defaultCloseOperation = EXIT_ON_CLOSE
-    setSize(800, 600)
+    setSize(1000, 600)
 
     setupUi()
     setupScheduler()
@@ -35,16 +37,18 @@ class LiftFrame : JFrame("JinBo Lift Monitor") {
 
   private fun setupUi() {
     val mainPanel = JPanel().apply {
-      layout = GridLayout(1, 3, 5, 10)
+      layout = GridLayout(1, 4, 5, 10)
       background = Color.LIGHT_GRAY
     }
 
     val cpLeft = createBasePanel("楼层", Color.PINK, liftOutsidePanel())
     val cpCenter = createBasePanel("当前位置", Color.WHITE, curPosiPanel())
     val cpRight = createBasePanel("梯内", Color.ORANGE, liftInsidePanel())
+    val cpRight2 = createBasePanel("所有", Color.GREEN, liftInsidePanel2())
     mainPanel.add(cpLeft)
     mainPanel.add(cpCenter)
     mainPanel.add(cpRight)
+    mainPanel.add(cpRight2)
     add(mainPanel)
 
     // 创建日志区域
@@ -141,7 +145,7 @@ fun outSideFloorBtn(floorIdx: Int, floorLabel: String): JPanel = JPanel().apply 
  */
 fun curPosiPanel(): JPanel = JPanel().apply {
   layout = BorderLayout()
-  add(LiftAndDoor(20, 30, 0.0, false))
+  add(LiftAndDoor(20, 30, 4, 0.0, JinBoDoorStatus.CLOSE))
 }
 
 /**
@@ -156,11 +160,38 @@ fun liftInsidePanel(): JPanel = JPanel().apply {
     add(insideFloorBtn(idx, lbl))
   }
   add(JButton("开门"))
-  add(JButton("关门"))
+  add(
+    JButton("关门").apply {
+      addActionListener {
+        JinBoServer.close("A")
+      }
+    },
+  )
 }
 
 fun insideFloorBtn(floorIdx: Int, floorLabel: String): JPanel = JPanel().apply {
   layout = BorderLayout()
   // add(JButton(floorLabel))
   add(LabelCircle(floorIdx, floorLabel, 20, 20))
+}
+
+/**
+ * 总控面版
+ */
+fun liftInsidePanel2(): JPanel = JPanel().apply {
+  // val floorList = listOf("4", "3", "3", "1")
+  val floors = mapOf(4 to "4F", 3 to "3F", 2 to "2F", 1 to "1F")
+
+  layout = GridLayout(floors.size + 2, 1, 0, 5)
+  for ((idx, lbl) in floors) {
+    add(insideFloorBtn2(idx, lbl))
+  }
+  // add(JButton("开门"))
+  // add(JButton("关门"))
+}
+
+fun insideFloorBtn2(floorIdx: Int, floorLabel: String): JPanel = JPanel().apply {
+  layout = BorderLayout()
+  // add(JButton(floorLabel))
+  add(LabelCircle2(floorIdx, floorLabel, 20, 20))
 }
