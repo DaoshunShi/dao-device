@@ -1,5 +1,6 @@
 package org.dao.device.lift.jinbo
 
+import com.fasterxml.jackson.module.kotlin.jacksonTypeRef
 import io.netty.bootstrap.ServerBootstrap
 import io.netty.buffer.ByteBuf
 import io.netty.channel.*
@@ -8,6 +9,7 @@ import io.netty.channel.socket.SocketChannel
 import io.netty.channel.socket.nio.NioServerSocketChannel
 import io.netty.handler.codec.ByteToMessageDecoder
 import io.netty.handler.codec.MessageToByteEncoder
+import org.dao.device.common.JsonHelper
 import java.nio.charset.StandardCharsets
 
 class JinBoTcpServer(private val host: String, private val port: Int) {
@@ -145,13 +147,34 @@ class ServerHandler : SimpleChannelInboundHandler<ProtocolMessage>() {
     println("Data Length: ${msg.dataLength}")
     println("Data: ${msg.data}")
 
+    val respStr = when (msg.command) {
+      0x3e8 -> {
+        // 到指定楼层
+        val req: JinBoTcpGoToReq = JsonHelper.mapper.readValue(msg.data, jacksonTypeRef())
+        JinBoServer.request("A", JinBoReq(req.destFloor.toInt()))
+        JsonHelper.writeValueAsString(JinBoTcpResp())
+      }
+      0x3e9 -> {
+        // 关门
+        JinBoServer.close("A")
+        JsonHelper.writeValueAsString(JinBoTcpResp())
+      }
+      0x7d0 -> {
+        // 获取电梯状态
+        JsonHelper.writeValueAsString(JinBoServer.status("A"))
+      }
+
+      else -> {
+        ""
+      }
+    }
+
     // 示例响应
-    val responseJson = "{\"status\":\"success\",\"message\":\"Received your data\"}"
     val response = ProtocolMessage(
       msg.flowNo, // 使用相同的流水号
-      0x81, // 响应指令编号
-      responseJson.length,
-      responseJson,
+      msg.flowNo + 100000, // 响应指令编号
+      respStr.length,
+      respStr,
     )
 
     ctx.writeAndFlush(response)
@@ -163,8 +186,12 @@ class ServerHandler : SimpleChannelInboundHandler<ProtocolMessage>() {
   }
 }
 
-fun main() {
-  val host = "0.0.0.0"
-  val port = 8080
-  JinBoTcpServer(host, port).start()
-}
+data class JinBoTcpGoToReq(val destFloor: String)
+
+data class JinBoTcpResp(val code: String = "0", val msg: String = "noError")
+
+// fun main() {
+//   val host = "0.0.0.0"
+//   val port = 8080
+//   JinBoTcpServer(host, port).start()
+// }
