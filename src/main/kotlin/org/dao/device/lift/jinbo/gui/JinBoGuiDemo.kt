@@ -1,10 +1,14 @@
 package org.dao.device.lift.jinbo.gui
 
+import org.apache.commons.lang3.time.DateFormatUtils
+import org.apache.commons.lang3.time.DateUtils
 import org.dao.device.lift.jinbo.JinBoDoorStatus
 import org.dao.device.lift.jinbo.JinBoServer
 import java.awt.*
+import java.util.Date
 import javax.swing.BorderFactory
 import javax.swing.JButton
+import javax.swing.JCheckBox
 import javax.swing.JFrame
 import javax.swing.JLabel
 import javax.swing.JPanel
@@ -26,6 +30,8 @@ class LiftFrame : JFrame("JinBo Lift Monitor") {
   private val eventCounter = mutableMapOf<String, Int>()
 
   private val statusLabel = JLabel("状态: 等待事件...")
+
+  private var showLiftStatus = false
 
   init {
     defaultCloseOperation = EXIT_ON_CLOSE
@@ -53,19 +59,28 @@ class LiftFrame : JFrame("JinBo Lift Monitor") {
 
     // 创建日志区域
     val logPanel = JPanel(BorderLayout()).apply {
-      add(
-        JButton("清除日志").apply {
-          addActionListener {
-            logArea.text = ""
-            JinBoEventBus.fire(LiftEvent("清除日志", "清除日志按钮被点击"))
-          }
-        },
-        BorderLayout.NORTH,
-      )
       add(JScrollPane(logArea), BorderLayout.CENTER)
-      // add(statusLabel, BorderLayout.SOUTH)
-
-      add(statusLabel, BorderLayout.SOUTH)
+      add(
+        JPanel().apply {
+          add(statusLabel, BorderLayout.EAST)
+          add(
+            JPanel().apply {
+              add(
+                JButton("清除日志").apply {
+                  addActionListener {
+                    logArea.text = ""
+                    JinBoEventBus.fire(LiftEvent("清除日志", "清除日志按钮被点击"))
+                  }
+                },
+                BorderLayout.CENTER,
+              )
+              add(JCheckBox("打印电梯状态").apply { addActionListener { showLiftStatus = isSelected } }, BorderLayout.EAST)
+            },
+            BorderLayout.EAST,
+          )
+        },
+        BorderLayout.SOUTH,
+      )
       border = BorderFactory.createTitledBorder("事件日志")
     }
     add(logPanel, BorderLayout.SOUTH)
@@ -73,18 +88,20 @@ class LiftFrame : JFrame("JinBo Lift Monitor") {
 
   private fun setupScheduler() {
     Timer(100) {
-      logEvent(LiftEvent("定时器时间", "获取当前电梯状态"))
       val str = JinBoFetcher.fetch()
-      logEvent(LiftEvent("定时器时间", str))
+      // TODO 开关
+      if (showLiftStatus) {
+        logEvent(LiftEvent("定时器：电梯状态", str))
+      }
     }.apply { start() }
   }
 
-  private fun logEvent(event: LiftEvent) {
+  fun logEvent(event: LiftEvent) {
     // 更新事件计数器
     eventCounter[event.topic] = eventCounter.getOrDefault(event.topic, 0) + 1
 
     // 添加时间戳和日志消息
-    val timestamp = System.currentTimeMillis()
+    val timestamp = DateFormatUtils.format(Date(), "HH:mm:ss.SSS")
     logArea.append("$timestamp| ${event.topic}:${event.msg}\n")
 
     // 自动滚动到底部

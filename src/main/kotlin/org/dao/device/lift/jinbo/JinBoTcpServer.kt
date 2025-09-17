@@ -10,6 +10,7 @@ import io.netty.channel.socket.nio.NioServerSocketChannel
 import io.netty.handler.codec.ByteToMessageDecoder
 import io.netty.handler.codec.MessageToByteEncoder
 import org.dao.device.common.JsonHelper
+import org.dao.device.lift.jinbo.gui.LiftEvent
 import java.nio.charset.StandardCharsets
 
 class JinBoTcpServer(private val host: String, private val port: Int) {
@@ -152,11 +153,13 @@ class ServerHandler : SimpleChannelInboundHandler<ProtocolMessage>() {
         // 到指定楼层
         val req: JinBoTcpGoToReq = JsonHelper.mapper.readValue(msg.data, jacksonTypeRef())
         JinBoServer.request("A", JinBoReq(req.destFloor.toInt()))
+        JinBoServer.logReq(LiftEvent("goto", JsonHelper.writeValueAsString(req)))
         JsonHelper.writeValueAsString(JinBoTcpResp())
       }
       0x3e9 -> {
         // 关门
         JinBoServer.close("A")
+        JinBoServer.logReq(LiftEvent("close", ""))
         JsonHelper.writeValueAsString(JinBoTcpResp())
       }
       0x7d0 -> {

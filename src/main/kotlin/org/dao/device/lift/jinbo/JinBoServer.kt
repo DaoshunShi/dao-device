@@ -1,6 +1,8 @@
 package org.dao.device.lift.jinbo
 
+import org.apache.logging.log4j.core.LogEvent
 import org.dao.device.common.JsonHelper
+import org.dao.device.lift.jinbo.gui.LiftEvent
 import org.dao.device.lift.jinbo.gui.LiftFrame
 import org.slf4j.LoggerFactory
 import java.util.*
@@ -41,6 +43,7 @@ object JinBoServer {
   val lifts: MutableMap<String, JinBoRuntime> = ConcurrentHashMap()
 
   private const val STEP_DURATION = 1 // 电梯移动的最小时间单位，秒
+  val frame = LiftFrame()
 
   fun init() {
     logger.info("JinBoLiftService init")
@@ -50,7 +53,6 @@ object JinBoServer {
 
     worker = executor.submit { process() }
 
-    val frame = LiftFrame()
     frame.isVisible = true
   }
 
@@ -291,5 +293,12 @@ object JinBoServer {
    */
   private fun logAll() {
     logger.info("logAll: ${JsonHelper.mapper.writeValueAsString(lifts.values)}")
+  }
+
+  /**
+   * 在页面上打印日志
+   */
+  fun logReq(e: LiftEvent) {
+    frame.logEvent(e)
   }
 }
