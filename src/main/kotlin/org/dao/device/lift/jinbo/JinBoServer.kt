@@ -252,6 +252,14 @@ object JinBoServer {
   }
 
   /**
+   * TODO 单纯的开门。
+   *
+   * 如果电梯此时在某楼层，就开门
+   * 如果电梯此时在运行中，就不要开门
+   */
+  fun open(liftId: String): JinBoResp = JinBoResp()
+
+  /**
    * 请求电梯到指定楼层
    */
   fun request(liftId: String, req: JinBoReq): JinBoResp {
@@ -292,7 +300,7 @@ object JinBoServer {
    * 打印所有日志
    */
   private fun logAll() {
-    logger.info("logAll: ${JsonHelper.mapper.writeValueAsString(lifts.values)}")
+    // logger.info("logAll: ${JsonHelper.mapper.writeValueAsString(lifts.values)}")
   }
 
   /**

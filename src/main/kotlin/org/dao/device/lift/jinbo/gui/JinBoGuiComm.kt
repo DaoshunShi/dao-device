@@ -47,6 +47,14 @@ class LiftAndDoor(
 
     val centerX = width / 2
 
+    // 绘制文本
+    g2d.color = Color.black
+    g2d.font = Font("Arial", Font.PLAIN, 20)
+    val fontMetrics = g2d.fontMetrics
+    val textWidth = fontMetrics.stringWidth(status.name)
+    val textHeight = fontMetrics.height
+    g2d.drawString(status.name, (width - textWidth) / 2, height - lh - h - textHeight / 2)
+
     // 绘制电梯
     // 绘制门
     when (status) {

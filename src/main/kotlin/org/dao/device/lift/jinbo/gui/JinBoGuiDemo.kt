@@ -3,10 +3,14 @@ package org.dao.device.lift.jinbo.gui
 import org.apache.commons.lang3.time.DateFormatUtils
 import org.apache.commons.lang3.time.DateUtils
 import org.dao.device.lift.jinbo.JinBoDoorStatus
+import org.dao.device.lift.jinbo.JinBoReq
+import org.dao.device.lift.jinbo.JinBoReqSource
 import org.dao.device.lift.jinbo.JinBoServer
 import java.awt.*
 import java.util.Date
 import javax.swing.BorderFactory
+import javax.swing.Box
+import javax.swing.BoxLayout
 import javax.swing.JButton
 import javax.swing.JCheckBox
 import javax.swing.JFrame
@@ -62,25 +66,51 @@ class LiftFrame : JFrame("JinBo Lift Monitor") {
       add(JScrollPane(logArea), BorderLayout.CENTER)
       add(
         JPanel().apply {
-          add(statusLabel, BorderLayout.EAST)
+          layout = BoxLayout(this, BoxLayout.X_AXIS)
           add(
-            JPanel().apply {
-              add(
-                JButton("清除日志").apply {
-                  addActionListener {
-                    logArea.text = ""
-                    JinBoEventBus.fire(LiftEvent("清除日志", "清除日志按钮被点击"))
-                  }
-                },
-                BorderLayout.CENTER,
-              )
-              add(JCheckBox("打印电梯状态").apply { addActionListener { showLiftStatus = isSelected } }, BorderLayout.EAST)
+            JButton("清除日志").apply {
+              addActionListener {
+                logArea.text = ""
+                JinBoEventBus.fire(LiftEvent("清除日志", "清除日志按钮被点击"))
+                eventCounter.clear()
+                updateStatus()
+              }
             },
-            BorderLayout.EAST,
+          )
+          add(statusLabel, BorderLayout.EAST)
+          add(Box.createHorizontalGlue()) // 添加弹性空间
+          add(
+            JCheckBox("打印电梯状态").apply {
+              addActionListener { showLiftStatus = isSelected }
+            },
           )
         },
         BorderLayout.SOUTH,
       )
+
+      // add(
+      //   JPanel().apply {
+      //     add(statusLabel, BorderLayout.EAST)
+      //     add(
+      //       JPanel().apply {
+      //         add(
+      //           JButton("清除日志").apply {
+      //             addActionListener {
+      //               logArea.text = ""
+      //               JinBoEventBus.fire(LiftEvent("清除日志", "清除日志按钮被点击"))
+      //               eventCounter.clear()
+      //               updateStatus()
+      //             }
+      //           },
+      //           BorderLayout.CENTER,
+      //         )
+      //         add(JCheckBox("打印电梯状态").apply { addActionListener { showLiftStatus = isSelected } }, BorderLayout.EAST)
+      //       },
+      //       BorderLayout.EAST,
+      //     )
+      //   },
+      //   BorderLayout.SOUTH,
+      // )
       border = BorderFactory.createTitledBorder("事件日志")
     }
     add(logPanel, BorderLayout.SOUTH)
@@ -91,7 +121,7 @@ class LiftFrame : JFrame("JinBo Lift Monitor") {
       val str = JinBoFetcher.fetch()
       // TODO 开关
       if (showLiftStatus) {
-        logEvent(LiftEvent("定时器：电梯状态", str))
+        logEvent(LiftEvent("定时器-电梯状态", str))
       }
     }.apply { start() }
   }
@@ -114,7 +144,7 @@ class LiftFrame : JFrame("JinBo Lift Monitor") {
   private fun updateStatus() {
     val totalEvent = eventCounter.values.sum()
     val eventSummary = eventCounter.entries.joinToString("，") { "${it.key}：${it.value}" }
-    statusLabel.text = "状态：总事件数 $totalEvent，详情：$eventSummary"
+    statusLabel.text = "事件总数：$totalEvent | 详情：$eventSummary"
   }
 }
 
@@ -176,7 +206,16 @@ fun liftInsidePanel(): JPanel = JPanel().apply {
   for ((idx, lbl) in floors) {
     add(insideFloorBtn(idx, lbl))
   }
-  add(JButton("开门"))
+  add(
+    JButton("开门").apply {
+      addActionListener {
+        JinBoServer.request(
+          "A",
+          JinBoReq(destFloor = JinBoServer.lifts["A"]?.curFloor ?: 0, source = JinBoReqSource.InDoor),
+        )
+      }
+    },
+  )
   add(
     JButton("关门").apply {
       addActionListener {
