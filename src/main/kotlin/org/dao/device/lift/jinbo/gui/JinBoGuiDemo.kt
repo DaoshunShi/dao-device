@@ -2,6 +2,7 @@ package org.dao.device.lift.jinbo.gui
 
 import org.apache.commons.lang3.time.DateFormatUtils
 import org.apache.commons.lang3.time.DateUtils
+import org.dao.device.lift.jinbo.JinBoConfig
 import org.dao.device.lift.jinbo.JinBoDoorStatus
 import org.dao.device.lift.jinbo.JinBoReq
 import org.dao.device.lift.jinbo.JinBoReqSource
@@ -18,6 +19,7 @@ import javax.swing.JLabel
 import javax.swing.JPanel
 import javax.swing.JScrollPane
 import javax.swing.JTextArea
+import javax.swing.JTextField
 import javax.swing.Timer
 
 // fun main() {
@@ -46,6 +48,8 @@ class LiftFrame : JFrame("JinBo Lift Monitor") {
   }
 
   private fun setupUi() {
+    add(JinBoConfigPanel(), BorderLayout.NORTH)
+
     val mainPanel = JPanel().apply {
       layout = GridLayout(1, 4, 5, 10)
       background = Color.LIGHT_GRAY
@@ -77,7 +81,8 @@ class LiftFrame : JFrame("JinBo Lift Monitor") {
               }
             },
           )
-          add(statusLabel, BorderLayout.EAST)
+          add(Box.createHorizontalStrut(10))
+          add(statusLabel)
           add(Box.createHorizontalGlue()) // 添加弹性空间
           add(
             JCheckBox("打印电梯状态").apply {
