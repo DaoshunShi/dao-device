@@ -1,15 +1,23 @@
 package org.dao.device.lift.jinbo
 
 import com.fasterxml.jackson.annotation.JsonIgnore
+import org.dao.device.lift.jinbo.fe.LiftFrame
 import java.util.Date
 import java.util.concurrent.CopyOnWriteArrayList
 
 data class JinBoConfig(
   val id: String, // 电梯 ID
+  @Volatile
+  var port: Int, // 启动端口
   val floors: List<JinBoFloor>, // 楼层配置。注意：严格按照 index 顺序
-  val liftSpeed: Double, // 上下/下降速度，点位 m/s
-  val costDoorOp: Int, // 开门关门需要的时间，单位：ms
-  val doorHoldDuration: Int, // 开门维持的时间，单位：ms
+  @Volatile
+  var liftSpeed: Double, // 上下/下降速度，点位 m/s
+  @Volatile
+  var openCost: Int, // 开门需要的时间，单位：ms
+  @Volatile
+  var closeCost: Int, // 关门需要的时间，单位：ms
+  @Volatile
+  var closeDelay: Int, // 开门维持的时间，单位：ms
 )
 
 data class JinBoFloor(
@@ -56,6 +64,28 @@ data class JinBoRuntime(
   @Volatile
   var doorOpDoneOn: Date? = null // 门操作：完成时间
 
+  // 电梯 TCP 服务器
+  @JsonIgnore
+  private var tcpServer: JinBoTcpServer? = null
+
+  // 电梯 UI
+  @JsonIgnore
+  val frame = LiftFrame(config)
+
+  fun init() {
+    tcpServer = JinBoTcpServer("0.0.0.0", config.port)
+    tcpServer?.start()
+
+    frame.isVisible = true
+  }
+
+  fun dispose() {
+    tcpServer?.shutdown()
+    tcpServer = null
+
+    frame.isVisible = false
+  }
+
   /**
    * 电梯允许上下行
    */
@@ -64,7 +94,17 @@ data class JinBoRuntime(
   /**
    * 正好在楼层里，可以开关门
    */
-  fun infloor(): Boolean = config.floors.any { it.height == h }
+  fun canOpenDoor(): Boolean = config.floors.any { it.height == h }
+
+  fun updateCfg(newCfg: JinBoConfig) {
+    config.port = newCfg.port
+    config.liftSpeed = newCfg.liftSpeed
+    config.openCost = newCfg.openCost
+    config.closeCost = newCfg.closeCost
+    config.closeDelay = newCfg.closeDelay
+
+    tcpServer?.updatePort(newCfg.port)
+  }
 }
 
 /**

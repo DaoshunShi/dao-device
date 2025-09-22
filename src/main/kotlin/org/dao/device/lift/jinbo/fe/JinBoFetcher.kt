@@ -1,7 +1,6 @@
-package org.dao.device.lift.jinbo.gui
+package org.dao.device.lift.jinbo.fe
 
 import org.dao.device.common.JsonHelper
-import org.dao.device.lift.jinbo.JinBoDoorStatus
 import org.dao.device.lift.jinbo.JinBoReqSource
 import org.dao.device.lift.jinbo.JinBoServer
 

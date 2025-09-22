@@ -14,7 +14,7 @@ fun main() {
 object DeviceApplication {
   fun boot() {
     JinBoServer.init()
-    JinBoTcpServerManager.init()
+    // JinBoTcpServerManager.init()
 
     val app = Javalin.create { config ->
       config.bundledPlugins.enableDevLogging()

@@ -1,5 +1,7 @@
-package org.dao.device.lift.jinbo.gui
+package org.dao.device.lift.jinbo.fe
 
+import org.dao.device.lift.jinbo.JinBoConfig
+import org.dao.device.lift.jinbo.JinBoServer
 import java.awt.*
 import java.awt.event.ActionEvent
 import java.awt.event.ActionListener
@@ -8,7 +10,7 @@ import java.beans.PropertyChangeListener
 import java.util.function.Consumer
 import javax.swing.*
 
-class JinBoConfigPanel : JPanel() {
+class JinBoConfigPanel(val config: JinBoConfig) : JPanel() {
   // 配置字段输入框
   private val fieldInputs: MutableMap<String?, JTextField?> = HashMap<String?, JTextField?>()
 
@@ -158,6 +160,17 @@ class JinBoConfigPanel : JPanel() {
 
     // 这里可以添加保存到配置文件的逻辑
     // 例如: saveConfigToFile();
+    JinBoServer.updateConfig(
+      config.copy(
+        port = fieldInputs["启动端口"]!!.text.toInt(),
+        openCost = fieldInputs["开门耗时"]!!.text.toInt(),
+        closeCost = fieldInputs["关门耗时"]!!.text.toInt(),
+        closeDelay = fieldInputs["自动关门延迟时间"]!!.text.toInt(),
+        liftSpeed = fieldInputs["上升速度"]!!.text.toDouble(),
+      ),
+    )
+
+    updateConfig()
 
     // 退出编辑模式
     exitEditMode()
@@ -170,11 +183,11 @@ class JinBoConfigPanel : JPanel() {
       // 例如: Map<String, String> latestConfig = loadLatestConfig();
 
       // 模拟更新配置
-      fieldInputs["启动端口"]?.text = "8080"
-      fieldInputs["开门耗时"]?.text = "2"
-      fieldInputs["关门耗时"]?.text = "3"
-      fieldInputs["自动关门延迟时间"]?.text = "5"
-      fieldInputs["上升速度"]?.text = "1.5"
+      fieldInputs["启动端口"]?.text = config.port.toString()
+      fieldInputs["开门耗时"]?.text = config.openCost.toString()
+      fieldInputs["关门耗时"]?.text = config.closeCost.toString()
+      fieldInputs["自动关门延迟时间"]?.text = config.closeDelay.toString()
+      fieldInputs["上升速度"]?.text = config.liftSpeed.toString()
     }
   }
 

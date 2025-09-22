@@ -1,4 +1,4 @@
-package org.dao.device.lift.jinbo.gui
+package org.dao.device.lift.jinbo.fe
 
 import com.fasterxml.jackson.module.kotlin.jacksonTypeRef
 import org.dao.device.common.JsonHelper

@@ -10,37 +10,84 @@ import io.netty.channel.socket.nio.NioServerSocketChannel
 import io.netty.handler.codec.ByteToMessageDecoder
 import io.netty.handler.codec.MessageToByteEncoder
 import org.dao.device.common.JsonHelper
-import org.dao.device.lift.jinbo.gui.LiftEvent
+import org.dao.device.lift.jinbo.fe.LiftEvent
+import org.slf4j.LoggerFactory
 import java.nio.charset.StandardCharsets
+import java.util.concurrent.atomic.AtomicBoolean
 
-class JinBoTcpServer(private val host: String, private val port: Int) {
+class JinBoTcpServer(private val host: String, private val port0: Int) {
+
+  private val logger = LoggerFactory.getLogger(javaClass)
+
+  @Volatile
+  private var port = port0
+
+  private val bossGroup = NioEventLoopGroup()
+  private val workerGroup = NioEventLoopGroup()
+  private val isRunning = AtomicBoolean(false)
+  private var channel: Channel? = null
 
   fun start() {
-    val bossGroup = NioEventLoopGroup()
-    val workerGroup = NioEventLoopGroup()
+    Thread {
+      if (isRunning.get()) {
+        logger.info("Server is already running")
+        return@Thread
+      }
+
+      try {
+        val b = ServerBootstrap()
+        b.group(bossGroup, workerGroup)
+          .channel(NioServerSocketChannel::class.java)
+          .childHandler(object : ChannelInitializer<SocketChannel>() {
+            override fun initChannel(ch: SocketChannel) {
+              val pipeline = ch.pipeline()
+              pipeline.addLast(CustomProtocolDecoder())
+              pipeline.addLast(CustomProtocolEncoder())
+              pipeline.addLast(ServerHandler())
+            }
+          })
+          .option(ChannelOption.SO_BACKLOG, 128)
+          .childOption(ChannelOption.SO_KEEPALIVE, true)
+
+        val f = b.bind(host, port).sync()
+        channel = f.channel()
+        logger.info("Server started on $host:$port")
+        isRunning.set(true)
+        f.channel().closeFuture().sync()
+      } catch (e: Throwable) {
+        logger.error("Error during server startup: ${e.message}")
+      } finally {
+        if (!isRunning.get()) {
+          // shutdown()
+        }
+      }
+    }.start()
+  }
+
+  fun shutdown() {
+    if (!isRunning.get()) {
+      logger.info("Server is not running")
+      return
+    }
 
     try {
-      val b = ServerBootstrap()
-      b.group(bossGroup, workerGroup)
-        .channel(NioServerSocketChannel::class.java)
-        .childHandler(object : ChannelInitializer<SocketChannel>() {
-          override fun initChannel(ch: SocketChannel) {
-            val pipeline = ch.pipeline()
-            pipeline.addLast(CustomProtocolDecoder())
-            pipeline.addLast(CustomProtocolEncoder())
-            pipeline.addLast(ServerHandler())
-          }
-        })
-        .option(ChannelOption.SO_BACKLOG, 128)
-        .childOption(ChannelOption.SO_KEEPALIVE, true)
-
-      val f = b.bind(host, port).sync()
-      println("Server started on $host:$port")
-      f.channel().closeFuture().sync()
-    } finally {
+      channel?.close()?.sync()
       workerGroup.shutdownGracefully()
       bossGroup.shutdownGracefully()
+      isRunning.set(false)
+      logger.info("Server shutdown complete")
+    } catch (e: Exception) {
+      logger.error("Error during shutdown: ${e.message}")
     }
+  }
+
+  fun updatePort(newPort: Int) {
+    if (newPort == port) {
+      return
+    }
+    port = newPort
+    shutdown()
+    start()
   }
 }
 
@@ -140,13 +187,14 @@ class CustomProtocolEncoder : MessageToByteEncoder<ProtocolMessage>() {
 
 // 服务器业务处理器
 class ServerHandler : SimpleChannelInboundHandler<ProtocolMessage>() {
+  private val logger = LoggerFactory.getLogger(javaClass)
   override fun channelRead0(ctx: ChannelHandlerContext, msg: ProtocolMessage) {
     // 处理接收到的消息
-    println("Received message:")
-    println("Serial Number: ${msg.flowNo}")
-    println("Command ID: ${msg.command}")
-    println("Data Length: ${msg.dataLength}")
-    println("Data: ${msg.data}")
+    logger.debug("Received message:")
+    logger.debug("Serial Number: ${msg.flowNo}")
+    logger.debug("Command ID: ${msg.command}")
+    logger.debug("Data Length: ${msg.dataLength}")
+    logger.debug("Data: ${msg.data}")
 
     val respStr = when (msg.command) {
       0x3e8 -> {
@@ -184,7 +232,7 @@ class ServerHandler : SimpleChannelInboundHandler<ProtocolMessage>() {
   }
 
   override fun exceptionCaught(ctx: ChannelHandlerContext, cause: Throwable) {
-    cause.printStackTrace()
+    logger.error("Exception caught: ${cause.message}")
     ctx.close()
   }
 }
@@ -192,9 +240,3 @@ class ServerHandler : SimpleChannelInboundHandler<ProtocolMessage>() {
 data class JinBoTcpGoToReq(val destFloor: String)
 
 data class JinBoTcpResp(val code: String = "0", val msg: String = "noError")
-
-// fun main() {
-//   val host = "0.0.0.0"
-//   val port = 8080
-//   JinBoTcpServer(host, port).start()
-// }

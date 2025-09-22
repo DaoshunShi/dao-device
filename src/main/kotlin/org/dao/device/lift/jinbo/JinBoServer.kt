@@ -1,9 +1,6 @@
 package org.dao.device.lift.jinbo
 
-import org.apache.logging.log4j.core.LogEvent
-import org.dao.device.common.JsonHelper
-import org.dao.device.lift.jinbo.gui.LiftEvent
-import org.dao.device.lift.jinbo.gui.LiftFrame
+import org.dao.device.lift.jinbo.fe.LiftEvent
 import org.slf4j.LoggerFactory
 import java.util.*
 import java.util.concurrent.ConcurrentHashMap
@@ -43,7 +40,6 @@ object JinBoServer {
   val lifts: MutableMap<String, JinBoRuntime> = ConcurrentHashMap()
 
   private const val STEP_DURATION = 1 // 电梯移动的最小时间单位，秒
-  val frame = LiftFrame()
 
   fun init() {
     logger.info("JinBoLiftService init")
@@ -53,11 +49,19 @@ object JinBoServer {
 
     worker = executor.submit { process() }
 
-    frame.isVisible = true
+    lifts.values.map { it.init() }
   }
 
   fun dispose() {
+    lifts.values.map { it.dispose() }
     worker?.cancel(true)
+  }
+
+  /**
+   * 仅用于更新
+   */
+  fun updateConfig(cfg: JinBoConfig) {
+    lifts[cfg.id]?.updateCfg(cfg)
   }
 
   private fun process() {
@@ -115,11 +119,13 @@ object JinBoServer {
     lr.targetFloor =
       when (lr.liftStatus) {
         JinBoLiftStatus.Up -> lr.reqs.filter {
-          it.destFloor > lr.curFloor || (it.destFloor == lr.curFloor && lr.infloor())
+          it.destFloor > lr.curFloor || (it.destFloor == lr.curFloor && lr.canOpenDoor())
         }.minByOrNull { it.destFloor }
+
         JinBoLiftStatus.Down -> lr.reqs.filter {
-          it.destFloor < lr.curFloor || (it.destFloor == lr.curFloor && lr.infloor())
+          it.destFloor < lr.curFloor || (it.destFloor == lr.curFloor && lr.canOpenDoor())
         }.maxByOrNull { it.destFloor }
+
         JinBoLiftStatus.Idle -> lr.reqs.minByOrNull { it.destFloor - lr.curFloor }
       }?.destFloor
     if (lr.targetFloor != null) {
@@ -231,21 +237,21 @@ object JinBoServer {
       if (lr.doorOpStartOn == null) {
         lr.doorOpStartOn = now
       }
-      if (now.time - (lr.doorOpStartOn ?: now).time >= lr.config.costDoorOp) {
+      if (now.time - (lr.doorOpStartOn ?: now).time >= lr.config.openCost) {
         lr.doorStatus = JinBoDoorStatus.OPEN
       }
     } else if (lr.doorStatus == JinBoDoorStatus.CLOSING) {
       if (lr.doorOpStartOn == null) {
         lr.doorOpStartOn = now
       }
-      if (now.time - (lr.doorOpStartOn ?: now).time >= lr.config.costDoorOp) {
+      if (now.time - (lr.doorOpStartOn ?: now).time >= lr.config.closeCost) {
         lr.doorStatus = JinBoDoorStatus.CLOSE
       }
     } else if (lr.doorStatus == JinBoDoorStatus.OPEN) {
       if (lr.doorOpDoneOn == null) {
         lr.doorOpDoneOn = now
       }
-      if (now.time - (lr.doorOpDoneOn ?: now).time >= lr.config.doorHoldDuration) {
+      if (now.time - (lr.doorOpDoneOn ?: now).time >= lr.config.closeDelay) {
         closeDoor(lr)
       }
     }
@@ -307,6 +313,6 @@ object JinBoServer {
    * 在页面上打印日志
    */
   fun logReq(e: LiftEvent) {
-    frame.logEvent(e)
+    lifts.values.forEach { it.frame.logEvent(e) }
   }
 }

@@ -1,4 +1,4 @@
-package org.dao.device.lift.jinbo.gui
+package org.dao.device.lift.jinbo.fe
 
 import java.util.concurrent.CopyOnWriteArrayList
 
