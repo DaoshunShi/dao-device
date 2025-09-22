@@ -18,6 +18,8 @@ data class JinBoConfig(
   var closeCost: Int, // 关门需要的时间，单位：ms
   @Volatile
   var closeDelay: Int, // 开门维持的时间，单位：ms
+  @Volatile
+  var logTcp: Boolean = false, // 是否记录 TCP 日志
 )
 
 data class JinBoFloor(
@@ -73,7 +75,7 @@ data class JinBoRuntime(
   val frame = LiftFrame(config)
 
   fun init() {
-    tcpServer = JinBoTcpServer("0.0.0.0", config.port)
+    tcpServer = JinBoTcpServer("0.0.0.0", config.port, config.logTcp)
     tcpServer?.start()
 
     frame.isVisible = true
@@ -103,7 +105,7 @@ data class JinBoRuntime(
     config.closeCost = newCfg.closeCost
     config.closeDelay = newCfg.closeDelay
 
-    tcpServer?.updatePort(newCfg.port)
+    tcpServer?.updatePort(newCfg.port, newCfg.logTcp)
   }
 }
 

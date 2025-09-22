@@ -13,6 +13,7 @@ import javax.swing.*
 class JinBoConfigPanel(val config: JinBoConfig) : JPanel() {
   // 配置字段输入框
   private val fieldInputs: MutableMap<String?, JTextField?> = HashMap<String?, JTextField?>()
+  private var logTcpInput: JCheckBox? = null
 
   // 状态：true为编辑状态，false为查看状态
   private var isEditMode = false
@@ -58,6 +59,10 @@ class JinBoConfigPanel(val config: JinBoConfig) : JPanel() {
       // 添加水平间距
       fieldsPanel.add(Box.createHorizontalStrut(10))
     }
+
+    logTcpInput = JCheckBox("打印 TCP 报文")
+    logTcpInput?.isSelected = config.logTcp
+    fieldsPanel.add(logTcpInput)
 
     add(fieldsPanel)
 
@@ -167,6 +172,7 @@ class JinBoConfigPanel(val config: JinBoConfig) : JPanel() {
         closeCost = fieldInputs["关门耗时"]!!.text.toInt(),
         closeDelay = fieldInputs["自动关门延迟时间"]!!.text.toInt(),
         liftSpeed = fieldInputs["上升速度"]!!.text.toDouble(),
+        logTcp = logTcpInput?.isSelected ?: false,
       ),
     )
 
@@ -188,6 +194,7 @@ class JinBoConfigPanel(val config: JinBoConfig) : JPanel() {
       fieldInputs["关门耗时"]?.text = config.closeCost.toString()
       fieldInputs["自动关门延迟时间"]?.text = config.closeDelay.toString()
       fieldInputs["上升速度"]?.text = config.liftSpeed.toString()
+      // logTcpInput?.isSelected = config.logTcp
     }
   }
 

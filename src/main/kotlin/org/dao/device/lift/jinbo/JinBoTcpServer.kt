@@ -15,26 +15,24 @@ import org.slf4j.LoggerFactory
 import java.nio.charset.StandardCharsets
 import java.util.concurrent.atomic.AtomicBoolean
 
-class JinBoTcpServer(private val host: String, private val port0: Int) {
-
+class JinBoTcpServer(private val host: String, private var port: Int, private var logTcp: Boolean) {
   private val logger = LoggerFactory.getLogger(javaClass)
 
-  @Volatile
-  private var port = port0
-
-  private val bossGroup = NioEventLoopGroup()
-  private val workerGroup = NioEventLoopGroup()
   private val isRunning = AtomicBoolean(false)
+  private var bossGroup: NioEventLoopGroup? = null
+  private var workerGroup: NioEventLoopGroup? = null
   private var channel: Channel? = null
+  private var serverThread: Thread? = null
 
   fun start() {
-    Thread {
-      if (isRunning.get()) {
-        logger.info("Server is already running")
-        return@Thread
-      }
-
+    if (isRunning.get()) {
+      logger.info("Server is already running")
+      return
+    }
+    serverThread = Thread {
       try {
+        bossGroup = NioEventLoopGroup()
+        workerGroup = NioEventLoopGroup()
         val b = ServerBootstrap()
         b.group(bossGroup, workerGroup)
           .channel(NioServerSocketChannel::class.java)
@@ -48,20 +46,20 @@ class JinBoTcpServer(private val host: String, private val port0: Int) {
           })
           .option(ChannelOption.SO_BACKLOG, 128)
           .childOption(ChannelOption.SO_KEEPALIVE, true)
-
         val f = b.bind(host, port).sync()
         channel = f.channel()
         logger.info("Server started on $host:$port")
         isRunning.set(true)
         f.channel().closeFuture().sync()
-      } catch (e: Throwable) {
-        logger.error("Error during server startup: ${e.message}")
+      } catch (e: Exception) {
+        logger.error("Error during server startup: ${e.message}", e)
       } finally {
-        if (!isRunning.get()) {
-          // shutdown()
-        }
+        // shutdownInternal()
       }
-    }.start()
+    }.apply {
+      name = "JinBoTcpServer-$host:$port"
+      start()
+    }
   }
 
   fun shutdown() {
@@ -69,25 +67,48 @@ class JinBoTcpServer(private val host: String, private val port0: Int) {
       logger.info("Server is not running")
       return
     }
+    shutdownInternal()
+  }
 
+  private fun shutdownInternal() {
     try {
       channel?.close()?.sync()
-      workerGroup.shutdownGracefully()
-      bossGroup.shutdownGracefully()
+      workerGroup?.shutdownGracefully()?.sync()
+      bossGroup?.shutdownGracefully()?.sync()
       isRunning.set(false)
       logger.info("Server shutdown complete")
     } catch (e: Exception) {
-      logger.error("Error during shutdown: ${e.message}")
+      logger.error("Error during shutdown: ${e.message}", e)
+    } finally {
+      channel = null
+      bossGroup = null
+      workerGroup = null
     }
   }
 
-  fun updatePort(newPort: Int) {
-    if (newPort == port) {
-      return
-    }
-    port = newPort
-    shutdown()
-    start()
+  fun updatePort(newPort: Int, newLogTcp: Boolean) {
+    Thread {
+      if (newPort == port) {
+        return@Thread
+      }
+
+      logger.info("Updating port from $port to $newPort")
+      val wasRunning = isRunning.get()
+
+      if (wasRunning) {
+        shutdown()
+        // 等待服务器完全关闭
+        Thread.sleep(100) // 短暂等待确保资源释放
+      }
+
+      port = newPort
+      logTcp = newLogTcp
+
+      if (wasRunning) {
+        // 重新启动服务器
+        start()
+      }
+    }.start()
   }
 }
 
@@ -204,12 +225,14 @@ class ServerHandler : SimpleChannelInboundHandler<ProtocolMessage>() {
         JinBoServer.logReq(LiftEvent("goto", JsonHelper.writeValueAsString(req)))
         JsonHelper.writeValueAsString(JinBoTcpResp())
       }
+
       0x3e9 -> {
         // 关门
         JinBoServer.close("A")
         JinBoServer.logReq(LiftEvent("close", ""))
         JsonHelper.writeValueAsString(JinBoTcpResp())
       }
+
       0x7d0 -> {
         // 获取电梯状态
         JsonHelper.writeValueAsString(JinBoServer.status("A"))
