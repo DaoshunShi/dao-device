@@ -15,7 +15,12 @@ import org.slf4j.LoggerFactory
 import java.nio.charset.StandardCharsets
 import java.util.concurrent.atomic.AtomicBoolean
 
-class JinBoTcpServer(private val host: String, private var port: Int, private var logTcp: Boolean) {
+class JinBoTcpServer(
+  private val liftId: String, // 电梯 ID
+  private val host: String,
+  private var port: Int,
+  private var logTcp: Boolean,
+) {
   private val logger = LoggerFactory.getLogger(javaClass)
 
   private val isRunning = AtomicBoolean(false)
@@ -41,7 +46,7 @@ class JinBoTcpServer(private val host: String, private var port: Int, private va
               val pipeline = ch.pipeline()
               pipeline.addLast(CustomProtocolDecoder())
               pipeline.addLast(CustomProtocolEncoder())
-              pipeline.addLast(ServerHandler())
+              pipeline.addLast(ServerHandler(liftId))
             }
           })
           .option(ChannelOption.SO_BACKLOG, 128)
@@ -207,35 +212,35 @@ class CustomProtocolEncoder : MessageToByteEncoder<ProtocolMessage>() {
 }
 
 // 服务器业务处理器
-class ServerHandler : SimpleChannelInboundHandler<ProtocolMessage>() {
+class ServerHandler(val liftId: String) : SimpleChannelInboundHandler<ProtocolMessage>() {
   private val logger = LoggerFactory.getLogger(javaClass)
   override fun channelRead0(ctx: ChannelHandlerContext, msg: ProtocolMessage) {
     // 处理接收到的消息
-    logger.debug("Received message:")
-    logger.debug("Serial Number: ${msg.flowNo}")
-    logger.debug("Command ID: ${msg.command}")
-    logger.debug("Data Length: ${msg.dataLength}")
-    logger.debug("Data: ${msg.data}")
+    // logger.debug("Received message:")
+    // logger.debug("Serial Number: ${msg.flowNo}")
+    // logger.debug("Command ID: ${msg.command}")
+    // logger.debug("Data Length: ${msg.dataLength}")
+    // logger.debug("Data: ${msg.data}")
 
     val respStr = when (msg.command) {
       0x3e8 -> {
         // 到指定楼层
         val req: JinBoTcpGoToReq = JsonHelper.mapper.readValue(msg.data, jacksonTypeRef())
-        JinBoServer.request("A", JinBoReq(req.destFloor.toInt()))
-        JinBoServer.logReq(LiftEvent("goto", JsonHelper.writeValueAsString(req)))
+        JinBoServer.request(liftId, JinBoReq(req.destFloor.toInt()))
+        JinBoServer.logReq(liftId, LiftEvent("goto", JsonHelper.writeValueAsString(req)))
         JsonHelper.writeValueAsString(JinBoTcpResp())
       }
 
       0x3e9 -> {
         // 关门
-        JinBoServer.close("A")
-        JinBoServer.logReq(LiftEvent("close", ""))
+        JinBoServer.close(liftId)
+        JinBoServer.logReq(liftId, LiftEvent("close", ""))
         JsonHelper.writeValueAsString(JinBoTcpResp())
       }
 
       0x7d0 -> {
         // 获取电梯状态
-        JsonHelper.writeValueAsString(JinBoServer.status("A"))
+        JsonHelper.writeValueAsString(JinBoServer.status(liftId))
       }
 
       else -> {

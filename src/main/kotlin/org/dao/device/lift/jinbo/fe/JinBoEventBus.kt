@@ -1,5 +1,6 @@
 package org.dao.device.lift.jinbo.fe
 
+import java.util.concurrent.ConcurrentHashMap
 import java.util.concurrent.CopyOnWriteArrayList
 
 interface GuiEventListener {
@@ -7,9 +8,14 @@ interface GuiEventListener {
 }
 
 object JinBoEventBus {
-  var listener: List<GuiEventListener> = CopyOnWriteArrayList()
+  var listener: MutableMap<String, MutableList<GuiEventListener>> = ConcurrentHashMap()
 
-  fun fire(event: LiftEvent) {
-    listener.forEach { it.onEvent(event) }
+  @Synchronized
+  fun register(topic: String, l: GuiEventListener) {
+    listener.getOrPut(topic) { CopyOnWriteArrayList() }.add(l)
+  }
+
+  fun fire(topic: String, event: LiftEvent) {
+    listener[topic]?.forEach { it.onEvent(event) }
   }
 }

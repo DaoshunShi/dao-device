@@ -75,7 +75,7 @@ data class JinBoRuntime(
   val frame = LiftFrame(config)
 
   fun init() {
-    tcpServer = JinBoTcpServer("0.0.0.0", config.port, config.logTcp)
+    tcpServer = JinBoTcpServer(config.id, "0.0.0.0", config.port, config.logTcp)
     tcpServer?.start()
 
     frame.isVisible = true

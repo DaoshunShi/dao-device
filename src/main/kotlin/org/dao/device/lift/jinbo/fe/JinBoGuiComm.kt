@@ -2,6 +2,7 @@ package org.dao.device.lift.jinbo.fe
 
 import com.fasterxml.jackson.module.kotlin.jacksonTypeRef
 import org.dao.device.common.JsonHelper
+import org.dao.device.lift.jinbo.JinBoConfig
 import org.dao.device.lift.jinbo.JinBoDoorStatus
 import org.dao.device.lift.jinbo.JinBoLiftStatus
 import org.dao.device.lift.jinbo.JinBoReq
@@ -22,10 +23,11 @@ data class LiftEvent(val topic: String, val msg: String)
  * 画电梯
  */
 class LiftAndDoor(
-  val lw: Int, // 梯厢宽度
-  val lh: Int, // 梯厢高度
-  val floorNo: Int, // 楼层数量
-  h0: Double, // 电梯底部当前高度
+  config: JinBoConfig, // 梯厢宽度
+  val lw: Int, // 梯厢高度
+  val lh: Int, // 楼层数量
+  val floorNo: Int, // 电梯底部当前高度
+  h0: Double,
   status0: JinBoDoorStatus, // 电梯是开着的
 ) : JPanel(),
   GuiEventListener {
@@ -35,7 +37,7 @@ class LiftAndDoor(
   private var status = status0
 
   init {
-    JinBoEventBus.listener += this
+    JinBoEventBus.register(config.id, this)
   }
 
   override fun paintComponent(g: Graphics?) {
@@ -133,8 +135,13 @@ class LiftAndDoor(
 /**
  * 圆形内套三角，用于外部呼叫电梯按钮
  */
-class TriangleCircle(val floorIdx: Int, val circleRadius: Int, val triangleSize: Int, val up: Boolean) :
-  JPanel(),
+class TriangleCircle(
+  val config: JinBoConfig,
+  val floorIdx: Int,
+  val circleRadius: Int,
+  val triangleSize: Int,
+  val up: Boolean,
+) : JPanel(),
   GuiEventListener {
 
   // 颜色设置
@@ -150,7 +157,7 @@ class TriangleCircle(val floorIdx: Int, val circleRadius: Int, val triangleSize:
         active = !active
 
         JinBoServer.request(
-          "A",
+          config.id,
           JinBoReq(floorIdx, JinBoReqSource.OutDoor, if (up) JinBoLiftStatus.Up else JinBoLiftStatus.Down),
         )
 
@@ -158,7 +165,7 @@ class TriangleCircle(val floorIdx: Int, val circleRadius: Int, val triangleSize:
       }
     })
 
-    JinBoEventBus.listener += this
+    JinBoEventBus.register(config.id, this)
   }
 
   override fun paintComponent(g: Graphics) {
@@ -224,7 +231,7 @@ class TriangleCircle(val floorIdx: Int, val circleRadius: Int, val triangleSize:
 /**
  * 圆形内套双三角，用于内部开关电梯门
  */
-class DoubleTriangleCircle(circleR: Int, triSize: Int, triRad: Double) :
+class DoubleTriangleCircle(config: JinBoConfig, circleR: Int, triSize: Int, triRad: Double) :
   JPanel(),
   GuiEventListener {
 
@@ -241,7 +248,7 @@ class DoubleTriangleCircle(circleR: Int, triSize: Int, triRad: Double) :
   init {
     background = backgroundColor
 
-    JinBoEventBus.listener += this
+    JinBoEventBus.register(config.id, this)
   }
 
   override fun paintComponent(g: Graphics) {
@@ -308,7 +315,7 @@ class DoubleTriangleCircle(circleR: Int, triSize: Int, triRad: Double) :
 /**
  * 圆形内套文本，用于电梯内去指定楼层
  */
-class LabelCircle(val floorIdx: Int, val labelStr: String, val circleR: Int, val labelSize: Int) :
+class LabelCircle(config: JinBoConfig, val floorIdx: Int, val labelStr: String, val circleR: Int, val labelSize: Int) :
   JPanel(),
   GuiEventListener {
 
@@ -320,13 +327,13 @@ class LabelCircle(val floorIdx: Int, val labelStr: String, val circleR: Int, val
         println("Clicked on LabelCircle")
         active = !active
 
-        JinBoServer.request("A", JinBoReq(floorIdx, JinBoReqSource.InDoor))
+        JinBoServer.request(config.id, JinBoReq(floorIdx, JinBoReqSource.InDoor))
 
         repaint()
       }
     })
 
-    JinBoEventBus.listener += this
+    JinBoEventBus.register(config.id, this)
   }
 
   override fun paintComponent(g: Graphics) {
@@ -386,7 +393,7 @@ class LabelCircle(val floorIdx: Int, val labelStr: String, val circleR: Int, val
 /**
  * 圆形内套文本，用于电梯内去指定楼层
  */
-class LabelCircle2(val floorIdx: Int, val labelStr: String, val circleR: Int, val labelSize: Int) :
+class LabelCircle2(config: JinBoConfig, val floorIdx: Int, val labelStr: String, val circleR: Int, val labelSize: Int) :
   JPanel(),
   GuiEventListener {
 
@@ -398,13 +405,13 @@ class LabelCircle2(val floorIdx: Int, val labelStr: String, val circleR: Int, va
         println("Clicked on LabelCircle")
         active = !active
 
-        JinBoServer.request("A", JinBoReq(floorIdx, JinBoReqSource.InDoor))
+        JinBoServer.request(config.id, JinBoReq(floorIdx, JinBoReqSource.InDoor))
 
         repaint()
       }
     })
 
-    JinBoEventBus.listener += this
+    JinBoEventBus.register(config.id, this)
   }
 
   override fun paintComponent(g: Graphics) {
@@ -453,7 +460,7 @@ class LabelCircle2(val floorIdx: Int, val labelStr: String, val circleR: Int, va
   }
 
   override fun onEvent(event: LiftEvent) {
-    if (event.topic == "all") {
+    if (event.topic == "tcp") {
       val list: List<JinBoReq> = JsonHelper.mapper.readValue(event.msg, jacksonTypeRef())
       active = list.any { it.destFloor == floorIdx }
       repaint()

@@ -6,10 +6,11 @@ import org.dao.device.lift.jinbo.JinBoServer
 
 object JinBoFetcher {
   // 获取电梯运行动态
-  fun fetch(): String {
-    val lr = JinBoServer.lifts["A"] ?: return ""
+  fun fetch(liftId: String): String {
+    val lr = JinBoServer.lifts[liftId] ?: return ""
 
     JinBoEventBus.fire(
+      liftId,
       LiftEvent(
         "outside",
         JsonHelper.mapper.writeValueAsString(
@@ -18,12 +19,12 @@ object JinBoFetcher {
       ),
     )
     JinBoEventBus.fire(
+      liftId,
       LiftEvent(
         "liftState",
         JsonHelper.mapper.writeValueAsString(
           mapOf(
             "h" to lr.h / 12.0, // TODO 最高楼层的高度
-            // "o" to (lr.doorStatus in listOf(JinBoDoorStatus.OPEN, JinBoDoorStatus.OPENING, JinBoDoorStatus.CLOSING)),
             "status" to lr.doorStatus,
           ),
         ),
@@ -31,6 +32,7 @@ object JinBoFetcher {
     )
     val l0 = lr.reqs.filter { it.source == JinBoReqSource.InDoor }
     JinBoEventBus.fire(
+      liftId,
       LiftEvent(
         "inside",
         JsonHelper.mapper.writeValueAsString(
@@ -39,10 +41,11 @@ object JinBoFetcher {
       ),
     )
     JinBoEventBus.fire(
+      liftId,
       LiftEvent(
-        "all",
+        "tcp",
         JsonHelper.mapper.writeValueAsString(
-          lr.reqs, // .filter { it.source == JinBoReqSource.InDoor },
+          lr.reqs.filter { it.source == JinBoReqSource.Tcp },
         ),
       ),
     )

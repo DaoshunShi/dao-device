@@ -57,6 +57,10 @@ object JinBoServer {
     worker?.cancel(true)
   }
 
+  fun disposeLift(liftId: String) {
+    lifts.remove(liftId)?.dispose()
+  }
+
   /**
    * 仅用于更新
    */
@@ -263,7 +267,13 @@ object JinBoServer {
    * 如果电梯此时在某楼层，就开门
    * 如果电梯此时在运行中，就不要开门
    */
-  fun open(liftId: String): JinBoResp = JinBoResp()
+  fun open(liftId: String): JinBoResp {
+    val lr = mustGetLift(liftId)
+    synchronized(lr) {
+      // TODO
+    }
+    return JinBoResp()
+  }
 
   /**
    * 请求电梯到指定楼层
@@ -312,7 +322,7 @@ object JinBoServer {
   /**
    * 在页面上打印日志
    */
-  fun logReq(e: LiftEvent) {
-    lifts.values.forEach { it.frame.logEvent(e) }
+  fun logReq(liftId: String, e: LiftEvent) {
+    lifts[liftId]?.frame?.logEvent(e)
   }
 }
