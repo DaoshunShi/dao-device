@@ -227,14 +227,14 @@ class ServerHandler(val liftId: String) : SimpleChannelInboundHandler<ProtocolMe
         // 到指定楼层
         val req: JinBoTcpGoToReq = JsonHelper.mapper.readValue(msg.data, jacksonTypeRef())
         JinBoServer.request(liftId, JinBoReq(req.destFloor.toInt()))
-        JinBoServer.logReq(liftId, LiftEvent("goto", JsonHelper.writeValueAsString(req)))
+        JinBoServer.logEvent(liftId, LiftEvent("goto", JsonHelper.writeValueAsString(req)))
         JsonHelper.writeValueAsString(JinBoTcpResp())
       }
 
       0x3e9 -> {
         // 关门
         JinBoServer.close(liftId)
-        JinBoServer.logReq(liftId, LiftEvent("close", ""))
+        JinBoServer.logEvent(liftId, LiftEvent("close", ""))
         JsonHelper.writeValueAsString(JinBoTcpResp())
       }
 
@@ -261,7 +261,22 @@ class ServerHandler(val liftId: String) : SimpleChannelInboundHandler<ProtocolMe
 
   override fun exceptionCaught(ctx: ChannelHandlerContext, cause: Throwable) {
     logger.error("Exception caught: ${cause.message}")
+    JinBoServer.logEvent(liftId, LiftEvent("Tcp exception", cause.message ?: ""))
     ctx.close()
+  }
+
+  override fun channelActive(ctx: ChannelHandlerContext?) {
+    val msg = "Client connected: ${ctx?.channel()?.remoteAddress()}"
+    JinBoServer.logEvent(liftId, LiftEvent("Connected", msg))
+    super.channelActive(ctx)
+  }
+
+  override fun channelInactive(ctx: ChannelHandlerContext?) {
+    val msg = "Client disconnected: ${ctx?.channel()?.remoteAddress()}"
+    logger.error(msg)
+    JinBoServer.logEvent(liftId, LiftEvent("DisConnected", msg))
+    ctx?.close()
+    super.channelInactive(ctx)
   }
 }
 

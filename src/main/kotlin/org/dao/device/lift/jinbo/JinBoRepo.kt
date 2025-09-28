@@ -19,22 +19,22 @@ object JinBoRepo {
           3 * 1000,
         ),
       ),
-      JinBoRuntime(
-        JinBoConfig(
-          "B",
-          8081,
-          listOf(
-            JinBoFloor(1, "L1", 0.0),
-            JinBoFloor(2, "L2", 3.0),
-            JinBoFloor(3, "L3", 6.0),
-            JinBoFloor(4, "L4", 9.0),
-          ),
-          0.6,
-          1 * 1000,
-          1 * 1000,
-          3 * 1000,
-        ),
-      ),
+      // JinBoRuntime(
+      //   JinBoConfig(
+      //     "B",
+      //     8081,
+      //     listOf(
+      //       JinBoFloor(1, "L1", 0.0),
+      //       JinBoFloor(2, "L2", 3.0),
+      //       JinBoFloor(3, "L3", 6.0),
+      //       JinBoFloor(4, "L4", 9.0),
+      //     ),
+      //     0.6,
+      //     1 * 1000,
+      //     1 * 1000,
+      //     3 * 1000,
+      //   ),
+      // ),
     )
     return lifts.associateBy { it.config.id }.toMutableMap()
   }

@@ -322,7 +322,7 @@ object JinBoServer {
   /**
    * 在页面上打印日志
    */
-  fun logReq(liftId: String, e: LiftEvent) {
+  fun logEvent(liftId: String, e: LiftEvent) {
     lifts[liftId]?.frame?.logEvent(e)
   }
 }
