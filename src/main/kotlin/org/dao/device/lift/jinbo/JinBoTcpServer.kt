@@ -14,12 +14,17 @@ import org.dao.device.lift.jinbo.fe.LiftEvent
 import org.slf4j.LoggerFactory
 import java.nio.charset.StandardCharsets
 import java.util.concurrent.atomic.AtomicBoolean
+import java.util.concurrent.atomic.AtomicInteger
+import java.util.concurrent.locks.ReentrantLock
+import java.util.concurrent.locks.ReentrantReadWriteLock
+import kotlin.concurrent.withLock
 
 class JinBoTcpServer(
   private val liftId: String, // 电梯 ID
   private val host: String,
   private var port: Int,
   private var logTcp: Boolean,
+  var connLimit: Int, // 最大连接数
 ) {
   private val logger = LoggerFactory.getLogger(javaClass)
 
@@ -28,6 +33,12 @@ class JinBoTcpServer(
   private var workerGroup: NioEventLoopGroup? = null
   private var channel: Channel? = null
   private var serverThread: Thread? = null
+
+  val connectionLock = ReentrantLock()
+
+  // private val readLock = connectionLock.readLock()
+  // private val writeLock = connectionLock.writeLock()
+  val connectionCount = AtomicInteger(0)
 
   fun start() {
     if (isRunning.get()) {
@@ -43,10 +54,19 @@ class JinBoTcpServer(
           .channel(NioServerSocketChannel::class.java)
           .childHandler(object : ChannelInitializer<SocketChannel>() {
             override fun initChannel(ch: SocketChannel) {
+              // 校验链接数量
+              connectionLock.withLock {
+                if (connectionCount.get() >= connLimit) {
+                  logger.warn("Connection limit reached, rejecting new connection")
+                  ch.close()
+                  return
+                }
+              }
+
               val pipeline = ch.pipeline()
               pipeline.addLast(CustomProtocolDecoder())
               pipeline.addLast(CustomProtocolEncoder())
-              pipeline.addLast(ServerHandler(liftId))
+              pipeline.addLast(ServerHandler(liftId, this@JinBoTcpServer))
             }
           })
           .option(ChannelOption.SO_BACKLOG, 128)
@@ -212,7 +232,7 @@ class CustomProtocolEncoder : MessageToByteEncoder<ProtocolMessage>() {
 }
 
 // 服务器业务处理器
-class ServerHandler(val liftId: String) : SimpleChannelInboundHandler<ProtocolMessage>() {
+class ServerHandler(val liftId: String, val server: JinBoTcpServer) : SimpleChannelInboundHandler<ProtocolMessage>() {
   private val logger = LoggerFactory.getLogger(javaClass)
   override fun channelRead0(ctx: ChannelHandlerContext, msg: ProtocolMessage) {
     // 处理接收到的消息
@@ -260,23 +280,45 @@ class ServerHandler(val liftId: String) : SimpleChannelInboundHandler<ProtocolMe
   }
 
   override fun exceptionCaught(ctx: ChannelHandlerContext, cause: Throwable) {
-    logger.error("Exception caught: ${cause.message}")
-    JinBoServer.logEvent(liftId, LiftEvent("Tcp exception", cause.message ?: ""))
-    ctx.close()
+    server.connectionLock.withLock {
+      if (server.connectionCount.get() > 0) {
+        server.connectionCount.getAndAdd(-1)
+      }
+
+      logger.error("Exception caught: ${cause.message}")
+      JinBoServer.logEvent(liftId, LiftEvent("Tcp exception", cause.message ?: ""))
+      ctx.close()
+    }
   }
 
   override fun channelActive(ctx: ChannelHandlerContext?) {
-    val msg = "Client connected: ${ctx?.channel()?.remoteAddress()}"
-    JinBoServer.logEvent(liftId, LiftEvent("Connected", msg))
-    super.channelActive(ctx)
+    server.connectionLock.withLock {
+      if (server.connectionCount.get() >= server.connLimit) {
+        logger.warn("connection limit reached, close connection")
+        ctx?.close()
+        return
+      }
+
+      server.connectionCount.getAndAdd(1)
+
+      val msg = "Client connected: ${ctx?.channel()?.remoteAddress()}"
+      JinBoServer.logEvent(liftId, LiftEvent("Connected", msg))
+      super.channelActive(ctx)
+    }
   }
 
   override fun channelInactive(ctx: ChannelHandlerContext?) {
-    val msg = "Client disconnected: ${ctx?.channel()?.remoteAddress()}"
-    logger.error(msg)
-    JinBoServer.logEvent(liftId, LiftEvent("DisConnected", msg))
-    ctx?.close()
-    super.channelInactive(ctx)
+    server.connectionLock.withLock {
+      if (server.connectionCount.get() > 0) {
+        server.connectionCount.getAndAdd(-1)
+      }
+
+      val msg = "Client disconnected: ${ctx?.channel()?.remoteAddress()}"
+      logger.error(msg)
+      JinBoServer.logEvent(liftId, LiftEvent("DisConnected", msg))
+      ctx?.close()
+      super.channelInactive(ctx)
+    }
   }
 }
 

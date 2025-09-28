@@ -20,6 +20,8 @@ data class JinBoConfig(
   var closeDelay: Int, // 开门维持的时间，单位：ms
   @Volatile
   var logTcp: Boolean = false, // 是否记录 TCP 日志
+  @Volatile
+  var connLimit: Int = 1, // TCP client 连接数限制
 )
 
 data class JinBoFloor(
@@ -75,7 +77,7 @@ data class JinBoRuntime(
   val frame = LiftFrame(config)
 
   fun init() {
-    tcpServer = JinBoTcpServer(config.id, "0.0.0.0", config.port, config.logTcp)
+    tcpServer = JinBoTcpServer(config.id, "0.0.0.0", config.port, config.logTcp, config.connLimit)
     tcpServer?.start()
 
     frame.isVisible = true
