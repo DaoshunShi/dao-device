@@ -13,7 +13,7 @@ fun main() {
 object DeviceApplication {
   fun boot() {
     // JinBo 电梯
-    // JinBoServer.init()
+    JinBoServer.init()
 
     // 日志查看器
     LogViewerService.init()

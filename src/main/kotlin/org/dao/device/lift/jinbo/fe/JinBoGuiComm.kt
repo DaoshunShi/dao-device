@@ -1,13 +1,9 @@
 package org.dao.device.lift.jinbo.fe
 
 import com.fasterxml.jackson.module.kotlin.jacksonTypeRef
+import org.dao.device.common.GuiEventListener
 import org.dao.device.common.JsonHelper
-import org.dao.device.lift.jinbo.JinBoConfig
-import org.dao.device.lift.jinbo.JinBoDoorStatus
-import org.dao.device.lift.jinbo.JinBoLiftStatus
-import org.dao.device.lift.jinbo.JinBoReq
-import org.dao.device.lift.jinbo.JinBoReqSource
-import org.dao.device.lift.jinbo.JinBoServer
+import org.dao.device.lift.jinbo.*
 import java.awt.*
 import java.awt.event.MouseAdapter
 import java.awt.event.MouseEvent

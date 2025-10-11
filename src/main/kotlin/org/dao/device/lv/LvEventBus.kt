@@ -1,10 +1,12 @@
-package org.dao.device.lift.jinbo.fe
+package org.dao.device.lv
 
 import org.dao.device.common.GuiEventListener
+import org.dao.device.lift.jinbo.fe.LiftEvent
 import java.util.concurrent.ConcurrentHashMap
 import java.util.concurrent.CopyOnWriteArrayList
+import kotlin.collections.forEach
 
-object JinBoEventBus {
+object LvEventBus {
   var listener: MutableMap<String, MutableList<GuiEventListener>> = ConcurrentHashMap()
 
   @Synchronized
