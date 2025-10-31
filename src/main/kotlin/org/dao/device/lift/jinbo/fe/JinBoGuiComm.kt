@@ -38,8 +38,13 @@ class LiftAndDoor(
 
   override fun paintComponent(g: Graphics?) {
     background = Color.WHITE
-
+    
     val g2d = g as Graphics2D
+    
+    // 清除背景
+    g2d.color = background
+    g2d.fillRect(0, 0, width, height)
+    
     // 启用抗锯齿
     g2d.setRenderingHint(RenderingHints.KEY_ANTIALIASING, RenderingHints.VALUE_ANTIALIAS_ON)
 
@@ -166,7 +171,11 @@ class TriangleCircle(
 
   override fun paintComponent(g: Graphics) {
     val g2d = g as Graphics2D
-
+    
+    // 清除背景
+    g2d.color = background
+    g2d.fillRect(0, 0, width, height)
+    
     // 启用抗锯齿
     g2d.setRenderingHint(RenderingHints.KEY_ANTIALIASING, RenderingHints.VALUE_ANTIALIAS_ON)
 
@@ -334,7 +343,11 @@ class LabelCircle(config: JinBoConfig, val floorIdx: Int, val labelStr: String, 
 
   override fun paintComponent(g: Graphics) {
     val g2d = g as Graphics2D
-
+    
+    // 清除背景
+    g2d.color = background
+    g2d.fillRect(0, 0, width, height)
+    
     // 启用抗锯齿
     g2d.setRenderingHint(RenderingHints.KEY_ANTIALIASING, RenderingHints.VALUE_ANTIALIAS_ON)
 
@@ -412,7 +425,11 @@ class LabelCircle2(config: JinBoConfig, val floorIdx: Int, val labelStr: String,
 
   override fun paintComponent(g: Graphics) {
     val g2d = g as Graphics2D
-
+    
+    // 清除背景
+    g2d.color = background
+    g2d.fillRect(0, 0, width, height)
+    
     // 启用抗锯齿
     g2d.setRenderingHint(RenderingHints.KEY_ANTIALIASING, RenderingHints.VALUE_ANTIALIAS_ON)
 
