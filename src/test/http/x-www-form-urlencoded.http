@@ -1,0 +1,36 @@
+
+
+### x-www-form-urlencoded 请求
+POST /api/form/parse HTTP/1.1
+Host: localhost:7070
+Content-Type: application/x-www-form-urlencoded
+Content-Length: 25
+
+username=abc&password=123
+
+#
+
+
+### form-data 请求
+
+POST /api/form/parse HTTP/1.1
+Host: localhost:7070
+Content-Length: 407
+Content-Type: multipart/form-data; boundary=----WebKitFormBoundary7MA4YWxkTrZu0gW
+
+------WebKitFormBoundary7MA4YWxkTrZu0gW
+Content-Disposition: form-data; name="username"
+
+abc
+------WebKitFormBoundary7MA4YWxkTrZu0gW
+Content-Disposition: form-data; name="age"
+
+134
+------WebKitFormBoundary7MA4YWxkTrZu0gW
+Content-Disposition: form-data; name="avatar"; filename="69394E8ACA16770F672A64E3.falcon.json"
+Content-Type: <Content-Type header here>
+
+(data)
+------WebKitFormBoundary7MA4YWxkTrZu0gW--
+
+#
