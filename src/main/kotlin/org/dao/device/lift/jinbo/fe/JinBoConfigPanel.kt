@@ -9,6 +9,7 @@ import java.beans.PropertyChangeEvent
 import java.beans.PropertyChangeListener
 import java.util.function.Consumer
 import javax.swing.*
+import javax.swing.table.DefaultTableModel
 
 class JinBoConfigPanel(val config: JinBoConfig) : JPanel() {
   // 配置字段输入框
@@ -71,6 +72,11 @@ class JinBoConfigPanel(val config: JinBoConfig) : JPanel() {
 
     // 创建右侧按钮区域
     val buttonPanel = JPanel(FlowLayout(FlowLayout.RIGHT, 5, 0))
+
+    // 管理楼层按钮（始终显示）
+    val manageFloorsButton = JButton("管理楼层")
+    manageFloorsButton.addActionListener(ActionListener { e: ActionEvent? -> showFloorConfigDialog() })
+    buttonPanel.add(manageFloorsButton)
 
     // 编辑按钮（查看状态显示）
     val editButton = JButton("编辑")
@@ -207,5 +213,45 @@ class JinBoConfigPanel(val config: JinBoConfig) : JPanel() {
       "自动关门延迟时间",
       "上升速度",
     )
+  }
+
+  private fun showFloorConfigDialog() {
+    val dialog = JDialog()
+    dialog.title = "楼层配置 - 电梯 ${config.id}"
+    dialog.layout = BorderLayout()
+    dialog.setSize(600, 400)
+    dialog.setLocationRelativeTo(this) // 居中显示
+
+    // 创建表格模型
+    val columnNames = arrayOf("楼层索引", "标签", "高度 (米)", "禁用")
+    val tableModel = DefaultTableModel(columnNames, 0)
+
+    // 填充数据
+    for (floor in config.floors.sortedBy { it.index }) {
+      tableModel.addRow(arrayOf(
+        floor.index.toString(),
+        floor.label,
+        floor.height.toString(),
+        if (floor.disabled) "是" else "否"
+      ))
+    }
+
+    val table = JTable(tableModel)
+    table.fillsViewportHeight = true
+
+    val scrollPane = JScrollPane(table)
+    dialog.add(scrollPane, BorderLayout.CENTER)
+
+    // 添加底部按钮面板
+    val buttonPanel = JPanel(FlowLayout(FlowLayout.RIGHT))
+
+    val closeButton = JButton("关闭")
+    closeButton.addActionListener { dialog.dispose() }
+    buttonPanel.add(closeButton)
+
+    dialog.add(buttonPanel, BorderLayout.SOUTH)
+
+    dialog.isModal = true
+    dialog.isVisible = true
   }
 }

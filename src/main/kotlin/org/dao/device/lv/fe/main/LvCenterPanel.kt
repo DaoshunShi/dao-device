@@ -90,6 +90,7 @@ class LvCenterPanel :
 
       logLine.contains("INFO", ignoreCase = true) -> {
         StyleConstants.setForeground(style, Color.BLUE)
+        StyleConstants.setBackground(style, Color.YELLOW)
       }
 
       else -> {

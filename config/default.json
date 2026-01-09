@@ -1,0 +1,16 @@
+{
+  "id": "default",
+  "port": 8080,
+  "floors": [
+    {"index": 1, "label": "L1", "height": 0.0, "disabled": false},
+    {"index": 2, "label": "L2", "height": 3.0, "disabled": false},
+    {"index": 3, "label": "L3", "height": 6.0, "disabled": false},
+    {"index": 4, "label": "L4", "height": 9.0, "disabled": false}
+  ],
+  "liftSpeed": 0.6,
+  "openCost": 1000,
+  "closeCost": 1000,
+  "closeDelay": 3000,
+  "logTcp": false,
+  "connLimit": 1
+}

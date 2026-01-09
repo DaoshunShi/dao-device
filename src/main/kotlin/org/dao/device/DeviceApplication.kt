@@ -4,7 +4,6 @@ import io.javalin.Javalin
 import io.javalin.http.HandlerType
 import org.dao.device.lift.jinbo.JinBoHandler
 import org.dao.device.lift.jinbo.JinBoServer
-import org.dao.device.lv.LogViewerService
 
 fun main() {
   DeviceApplication.boot()
@@ -16,7 +15,7 @@ object DeviceApplication {
     JinBoServer.init()
 
     // 日志查看器
-    LogViewerService.init()
+    // LogViewerService.init()
 
     val app = Javalin.create { config ->
       config.bundledPlugins.enableDevLogging()

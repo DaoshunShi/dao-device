@@ -18,13 +18,15 @@ object JinBoFetcher {
         ),
       ),
     )
+    // 调试输出电梯高度
+    // println("[JinBoFetcher DEBUG] Elevator ${liftId} height: ${lr.h} meters, status: ${lr.doorStatus}")
     JinBoEventBus.fire(
       liftId,
       LiftEvent(
         "liftState",
         JsonHelper.mapper.writeValueAsString(
           mapOf(
-            "h" to lr.h / 12.0, // TODO 最高楼层的高度
+            "h" to lr.h, // 电梯当前实际高度（米）
             "status" to lr.doorStatus,
           ),
         ),

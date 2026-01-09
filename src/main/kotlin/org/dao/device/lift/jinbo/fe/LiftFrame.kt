@@ -132,11 +132,16 @@ class LiftFrame(val config: JinBoConfig) : JFrame("JinBo Lift Monitor") {
   }
 
   fun liftOutsidePanel(config: JinBoConfig): JPanel = JPanel().apply {
-    layout = GridLayout(4, 1, 0, 5)
+    // 获取启用的楼层并按索引降序排列（顶层在上）
+    val enabledFloors = config.floors
+      .filter { !it.disabled }
+      .sortedByDescending { it.index }
 
-    val floorMap = mapOf(4 to "4F", 3 to "3F", 2 to "2F", 1 to "1F")
-    for ((idx, lbl) in floorMap) {
-      add(outSideFloorBtn(config, idx, lbl))
+    // 动态设置网格布局：启用的楼层数 x 1
+    layout = GridLayout(enabledFloors.size, 1, 0, 5)
+
+    for (floor in enabledFloors) {
+      add(outSideFloorBtn(config, floor.index, floor.label))
     }
   }
 
@@ -156,19 +161,24 @@ class LiftFrame(val config: JinBoConfig) : JFrame("JinBo Lift Monitor") {
    */
   fun curPosiPanel(config: JinBoConfig): JPanel = JPanel().apply {
     layout = BorderLayout()
-    add(LiftAndDoor(config, 20, 30, 4, 0.0, JinBoDoorStatus.CLOSE))
+    // 使用电梯初始高度0.0米，事件会更新实际高度
+    add(Cage(config, 20, 30, 0.0, JinBoDoorStatus.CLOSE))
   }
 
   /**
    * 梯内面版
    */
   fun liftInsidePanel(config: JinBoConfig): JPanel = JPanel().apply {
-    // val floorList = listOf("4", "3", "3", "1")
-    val floors = mapOf(4 to "4F", 3 to "3F", 2 to "2F", 1 to "1F")
+    // 获取启用的楼层并按索引降序排列（顶层在上）
+    val enabledFloors = config.floors
+      .filter { !it.disabled }
+      .sortedByDescending { it.index }
 
-    layout = GridLayout(floors.size + 2, 1, 0, 5)
-    for ((idx, lbl) in floors) {
-      add(insideFloorBtn(config, idx, lbl))
+    // 动态设置网格布局：启用的楼层数 + 2（开门/关门按钮） x 1
+    layout = GridLayout(enabledFloors.size + 2, 1, 0, 5)
+
+    for (floor in enabledFloors) {
+      add(insideFloorBtn(config, floor.index, floor.label))
     }
     add(
       JButton("开门").apply {
@@ -199,11 +209,16 @@ class LiftFrame(val config: JinBoConfig) : JFrame("JinBo Lift Monitor") {
    * 总控面版
    */
   fun liftInsidePanel2(config: JinBoConfig): JPanel = JPanel().apply {
-    val floors = mapOf(4 to "4F", 3 to "3F", 2 to "2F", 1 to "1F")
+    // 获取启用的楼层并按索引降序排列（顶层在上）
+    val enabledFloors = config.floors
+      .filter { !it.disabled }
+      .sortedByDescending { it.index }
 
-    layout = GridLayout(floors.size + 2, 1, 0, 5)
-    for ((idx, lbl) in floors) {
-      add(insideFloorBtn2(config, idx, lbl))
+    // 动态设置网格布局：启用的楼层数 + 2（预留空间） x 1
+    layout = GridLayout(enabledFloors.size + 2, 1, 0, 5)
+
+    for (floor in enabledFloors) {
+      add(insideFloorBtn2(config, floor.index, floor.label))
     }
   }
 
