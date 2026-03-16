@@ -80,6 +80,8 @@ data class JinBoRuntime(
     tcpServer = JinBoTcpServer(config.id, "0.0.0.0", config.port, config.logTcp, config.connLimit)
     tcpServer?.start()
 
+    curFloor = config.floors.first().index
+
     frame.isVisible = true
   }
 
