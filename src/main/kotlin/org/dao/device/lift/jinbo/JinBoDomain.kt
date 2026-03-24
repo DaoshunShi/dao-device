@@ -68,6 +68,12 @@ data class JinBoRuntime(
   @Volatile
   var doorOpDoneOn: Date? = null // 门操作：完成时间
 
+  @Volatile
+  var emergencyStopped: Boolean = false // 是否处于急停状态
+
+  @Volatile
+  var emergencyStartedAt: Date? = null // 急停开始时间
+
   // 电梯 TCP 服务器
   @JsonIgnore
   private var tcpServer: JinBoTcpServer? = null
@@ -108,6 +114,7 @@ data class JinBoRuntime(
     config.openCost = newCfg.openCost
     config.closeCost = newCfg.closeCost
     config.closeDelay = newCfg.closeDelay
+    config.logTcp = newCfg.logTcp
 
     tcpServer?.updatePort(newCfg.port, newCfg.logTcp)
   }
@@ -162,6 +169,7 @@ data class JinBoResp(val code: String = "0", val msg: String = "noError")
 data class JinBoStatusResp(
   val currentFloor: String, // 当前楼层
   val doorStatus: JinBoDoorStatus, // 当前门的状态
+  val emergencyStopped: Boolean, // 是否处于急停状态
   val code: String = "0",
   val msg: String = "noError",
 ) {
@@ -169,6 +177,7 @@ data class JinBoStatusResp(
     fun of(runtime: JinBoRuntime): JinBoStatusResp = JinBoStatusResp(
       runtime.curFloor.toString(),
       runtime.doorStatus,
+      runtime.emergencyStopped,
     )
   }
 }

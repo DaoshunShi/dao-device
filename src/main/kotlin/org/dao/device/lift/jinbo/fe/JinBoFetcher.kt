@@ -28,11 +28,11 @@ object JinBoFetcher {
           mapOf(
             "h" to lr.h, // 电梯当前实际高度（米）
             "status" to lr.doorStatus,
+            "emergencyStopped" to lr.emergencyStopped,
           ),
         ),
       ),
     )
-    val l0 = lr.reqs.filter { it.source == JinBoReqSource.InDoor }
     JinBoEventBus.fire(
       liftId,
       LiftEvent(

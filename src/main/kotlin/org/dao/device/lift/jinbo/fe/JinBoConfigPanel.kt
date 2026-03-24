@@ -1,5 +1,8 @@
 package org.dao.device.lift.jinbo.fe
 
+import com.fasterxml.jackson.module.kotlin.jacksonTypeRef
+import org.dao.device.common.GuiEventListener
+import org.dao.device.common.JsonHelper
 import org.dao.device.lift.jinbo.JinBoConfig
 import org.dao.device.lift.jinbo.JinBoServer
 import java.awt.*
@@ -11,10 +14,11 @@ import java.util.function.Consumer
 import javax.swing.*
 import javax.swing.table.DefaultTableModel
 
-class JinBoConfigPanel(val config: JinBoConfig) : JPanel() {
+class JinBoConfigPanel(val config: JinBoConfig) : JPanel(), GuiEventListener {
   // 配置字段输入框
   private val fieldInputs: MutableMap<String?, JTextField?> = HashMap<String?, JTextField?>()
   private var logTcpInput: JCheckBox? = null
+  private val emergencyStopButton = JButton()
 
   // 状态：true为编辑状态，false为查看状态
   private var isEditMode = false
@@ -28,6 +32,14 @@ class JinBoConfigPanel(val config: JinBoConfig) : JPanel() {
   init {
     // 设置 BoxLayout 水平布局
     layout = BoxLayout(this, BoxLayout.X_AXIS)
+
+    emergencyStopButton.margin = Insets(4, 10, 4, 10)
+    emergencyStopButton.addActionListener {
+      JinBoServer.toggleEmergencyStop(config.id)
+      updateEmergencyStopButton(JinBoServer.lifts[config.id]?.emergencyStopped == true)
+    }
+    add(emergencyStopButton)
+    add(Box.createHorizontalStrut(10))
 
     // 创建左侧固定标签面板
     val titleLabel = JLabel("电梯配置")
@@ -147,6 +159,9 @@ class JinBoConfigPanel(val config: JinBoConfig) : JPanel() {
         field!!.background = readOnlyBackground // 使用更浅的灰色
       },
     )
+
+    JinBoEventBus.register(config.id, this)
+    updateEmergencyStopButton(JinBoServer.lifts[config.id]?.emergencyStopped == true)
   }
 
   // 进入编辑模式
@@ -201,6 +216,31 @@ class JinBoConfigPanel(val config: JinBoConfig) : JPanel() {
       fieldInputs["自动关门延迟时间"]?.text = config.closeDelay.toString()
       fieldInputs["上升速度"]?.text = config.liftSpeed.toString()
       // logTcpInput?.isSelected = config.logTcp
+    }
+  }
+
+  private fun updateEmergencyStopButton(emergencyStopped: Boolean) {
+    emergencyStopButton.text = if (emergencyStopped) "解除急停" else "急停"
+    emergencyStopButton.background =
+      if (emergencyStopped) Color(255, 204, 204) else (UIManager.getColor("Button.background") ?: Color(238, 238, 238))
+    emergencyStopButton.foreground =
+      if (emergencyStopped) Color(160, 0, 0) else (UIManager.getColor("Button.foreground") ?: Color.BLACK)
+    emergencyStopButton.isOpaque = true
+    emergencyStopButton.border = BorderFactory.createCompoundBorder(
+      BorderFactory.createLineBorder(if (emergencyStopped) Color(180, 0, 0) else Color.GRAY),
+      BorderFactory.createEmptyBorder(2, 4, 2, 4),
+    )
+  }
+
+  override fun onEvent(event: LiftEvent) {
+    if (event.topic != "liftState") {
+      return
+    }
+
+    try {
+      val map: Map<String, Any> = JsonHelper.mapper.readValue(event.msg, jacksonTypeRef())
+      updateEmergencyStopButton(map["emergencyStopped"] as? Boolean == true)
+    } catch (_: Exception) {
     }
   }
 

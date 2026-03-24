@@ -33,6 +33,7 @@ import kotlin.math.abs
  */
 object JinBoServer {
   private val logger = LoggerFactory.getLogger(javaClass)
+  private const val EMERGENCY_STOP_MSG = "电梯处于急停状态"
 
   private val executor: ExecutorService = Executors.newSingleThreadExecutor()
   private var worker: Future<*>? = null
@@ -84,6 +85,10 @@ object JinBoServer {
     synchronized(lr) {
       // 打印日志
       logAll()
+
+      if (lr.emergencyStopped) {
+        return
+      }
 
       // 清理原本的任务
       // cleanCurrentFloorReq(lr)
@@ -140,6 +145,7 @@ object JinBoServer {
       } else {
         JinBoLiftStatus.Idle
       }
+      lr.lifting = lr.targetFloor != lr.curFloor && lr.doorStatus == JinBoDoorStatus.CLOSE
     }
 
     if (lr.targetFloor == null) {
@@ -281,6 +287,9 @@ object JinBoServer {
   fun request(liftId: String, req: JinBoReq): JinBoResp {
     val lift = mustGetLift(liftId)
     synchronized(lift) {
+      if (lift.emergencyStopped) {
+        return JinBoResp("409", EMERGENCY_STOP_MSG)
+      }
       lift.reqs.add(req)
     }
     return JinBoResp()
@@ -292,10 +301,59 @@ object JinBoServer {
   fun close(liftId: String): JinBoResp {
     val lr = mustGetLift(liftId)
     synchronized(lr) {
+      if (lr.emergencyStopped) {
+        return JinBoResp("409", EMERGENCY_STOP_MSG)
+      }
       return if (closeDoor(lr)) {
-        JinBoResp("400", "$liftId 电梯正在运行中，不能关门")
-      } else {
         JinBoResp()
+      } else {
+        JinBoResp("400", "$liftId 电梯正在运行中，不能关门")
+      }
+    }
+  }
+
+  fun emergencyStop(liftId: String): JinBoResp {
+    val lr = mustGetLift(liftId)
+    synchronized(lr) {
+      if (lr.emergencyStopped) {
+        return JinBoResp()
+      }
+      lr.emergencyStopped = true
+      lr.emergencyStartedAt = Date()
+      logEvent(liftId, LiftEvent("急停", "$liftId 已进入急停状态"))
+    }
+    return JinBoResp()
+  }
+
+  fun releaseEmergencyStop(liftId: String): JinBoResp {
+    val lr = mustGetLift(liftId)
+    synchronized(lr) {
+      if (!lr.emergencyStopped) {
+        return JinBoResp()
+      }
+
+      val pausedAt = lr.emergencyStartedAt
+      val now = Date()
+      if (pausedAt != null) {
+        val pausedDuration = now.time - pausedAt.time
+        lr.doorOpStartOn = lr.doorOpStartOn?.let { Date(it.time + pausedDuration) }
+        lr.doorOpDoneOn = lr.doorOpDoneOn?.let { Date(it.time + pausedDuration) }
+      }
+
+      lr.emergencyStopped = false
+      lr.emergencyStartedAt = null
+      logEvent(liftId, LiftEvent("解除急停", "$liftId 已解除急停状态"))
+    }
+    return JinBoResp()
+  }
+
+  fun toggleEmergencyStop(liftId: String): JinBoResp {
+    val lr = mustGetLift(liftId)
+    synchronized(lr) {
+      return if (lr.emergencyStopped) {
+        releaseEmergencyStop(liftId)
+      } else {
+        emergencyStop(liftId)
       }
     }
   }
@@ -305,7 +363,9 @@ object JinBoServer {
    */
   fun status(liftId: String): JinBoStatusResp {
     val lift = mustGetLift(liftId)
-    return JinBoStatusResp.of(lift)
+    synchronized(lift) {
+      return JinBoStatusResp.of(lift)
+    }
   }
 
   fun getLifts(): List<JinBoRuntime> = lifts.values.toList()

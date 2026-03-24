@@ -246,16 +246,16 @@ class ServerHandler(val liftId: String, val server: JinBoTcpServer) : SimpleChan
       0x3e8 -> {
         // 到指定楼层
         val req: JinBoTcpGoToReq = JsonHelper.mapper.readValue(msg.data, jacksonTypeRef())
-        JinBoServer.request(liftId, JinBoReq(req.destFloor.toInt()))
-        JinBoServer.logEvent(liftId, LiftEvent("goto", JsonHelper.writeValueAsString(req)))
-        JsonHelper.writeValueAsString(JinBoTcpResp())
+        val resp = JinBoServer.request(liftId, JinBoReq(req.destFloor.toInt()))
+        JinBoServer.logEvent(liftId, LiftEvent("goto", "${JsonHelper.writeValueAsString(req)} -> ${JsonHelper.writeValueAsString(resp)}"))
+        JsonHelper.writeValueAsString(resp)
       }
 
       0x3e9 -> {
         // 关门
-        JinBoServer.close(liftId)
-        JinBoServer.logEvent(liftId, LiftEvent("close", ""))
-        JsonHelper.writeValueAsString(JinBoTcpResp())
+        val resp = JinBoServer.close(liftId)
+        JinBoServer.logEvent(liftId, LiftEvent("close", JsonHelper.writeValueAsString(resp)))
+        JsonHelper.writeValueAsString(resp)
       }
 
       0x7d0 -> {

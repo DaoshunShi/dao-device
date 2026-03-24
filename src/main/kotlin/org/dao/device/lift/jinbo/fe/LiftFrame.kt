@@ -1,13 +1,16 @@
 package org.dao.device.lift.jinbo.fe
 
+import com.fasterxml.jackson.module.kotlin.jacksonTypeRef
 import org.apache.commons.lang3.time.DateFormatUtils
+import org.dao.device.common.GuiEventListener
+import org.dao.device.common.JsonHelper
 import org.dao.device.lift.jinbo.*
 import java.awt.*
 import java.util.*
 import javax.swing.*
 import javax.swing.Timer
 
-class LiftFrame(val config: JinBoConfig) : JFrame("JinBo Lift Monitor") {
+class LiftFrame(val config: JinBoConfig) : JFrame("JinBo Lift Monitor"), GuiEventListener {
 
   private val logArea = JTextArea(10, 30).apply {
     isEditable = false
@@ -15,6 +18,14 @@ class LiftFrame(val config: JinBoConfig) : JFrame("JinBo Lift Monitor") {
   private val eventCounter = mutableMapOf<String, Int>()
 
   private val statusLabel = JLabel("状态: 等待事件...")
+  private val emergencyBanner = JLabel("当前处于急停状态", JLabel.CENTER).apply {
+    isOpaque = true
+    background = Color(200, 0, 0)
+    foreground = Color.WHITE
+    font = font.deriveFont(Font.BOLD, 15f)
+    border = BorderFactory.createEmptyBorder(6, 12, 6, 12)
+    isVisible = false
+  }
 
   private var showLiftStatus = false
 
@@ -24,6 +35,8 @@ class LiftFrame(val config: JinBoConfig) : JFrame("JinBo Lift Monitor") {
 
     setupUi()
     setupScheduler()
+    JinBoEventBus.register(config.id, this)
+    updateEmergencyBanner(JinBoServer.lifts[config.id]?.emergencyStopped == true)
   }
 
   override fun dispose() {
@@ -37,6 +50,7 @@ class LiftFrame(val config: JinBoConfig) : JFrame("JinBo Lift Monitor") {
     val mainPanel = JPanel().apply {
       layout = GridLayout(1, 4, 5, 10)
       background = Color.LIGHT_GRAY
+      border = BorderFactory.createEmptyBorder(5, 0, 0, 0)
     }
 
     val cpLeft = createBasePanel("楼层", Color.PINK, liftOutsidePanel(config))
@@ -47,7 +61,13 @@ class LiftFrame(val config: JinBoConfig) : JFrame("JinBo Lift Monitor") {
     mainPanel.add(cpCenter)
     mainPanel.add(cpRight)
     mainPanel.add(cpRight2)
-    add(mainPanel)
+    add(
+      JPanel(BorderLayout()).apply {
+        add(emergencyBanner, BorderLayout.NORTH)
+        add(mainPanel, BorderLayout.CENTER)
+      },
+      BorderLayout.CENTER,
+    )
 
     // 创建日志区域
     val logPanel = JPanel(BorderLayout()).apply {
@@ -110,6 +130,22 @@ class LiftFrame(val config: JinBoConfig) : JFrame("JinBo Lift Monitor") {
     val totalEvent = eventCounter.values.sum()
     val eventSummary = eventCounter.entries.joinToString("，") { "${it.key}：${it.value}" }
     statusLabel.text = "事件总数：$totalEvent | 详情：$eventSummary"
+  }
+
+  private fun updateEmergencyBanner(emergencyStopped: Boolean) {
+    emergencyBanner.isVisible = emergencyStopped
+  }
+
+  override fun onEvent(event: LiftEvent) {
+    if (event.topic != "liftState") {
+      return
+    }
+
+    try {
+      val map: Map<String, Any> = JsonHelper.mapper.readValue(event.msg, jacksonTypeRef())
+      updateEmergencyBanner(map["emergencyStopped"] as? Boolean == true)
+    } catch (_: Exception) {
+    }
   }
 
   // 创建外部框
