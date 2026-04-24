@@ -14,7 +14,9 @@ import java.util.function.Consumer
 import javax.swing.*
 import javax.swing.table.DefaultTableModel
 
-class JinBoConfigPanel(val config: JinBoConfig) : JPanel(), GuiEventListener {
+class JinBoConfigPanel(val config: JinBoConfig) :
+  JPanel(),
+  GuiEventListener {
   // 配置字段输入框
   private val fieldInputs: MutableMap<String?, JTextField?> = HashMap<String?, JTextField?>()
   private var logTcpInput: JCheckBox? = null
@@ -30,8 +32,8 @@ class JinBoConfigPanel(val config: JinBoConfig) : JPanel(), GuiEventListener {
   private val readOnlyBackground = Color(240, 240, 240) // 更浅的灰色
 
   init {
-    // 设置 BoxLayout 水平布局
-    layout = BoxLayout(this, BoxLayout.X_AXIS)
+    // 使用可换行布局，窗口变窄时自动换行并同步增加面板高度
+    layout = WrapFlowLayout(FlowLayout.LEFT, 10, 5)
 
     emergencyStopButton.margin = Insets(4, 10, 4, 10)
     emergencyStopButton.addActionListener {
@@ -39,75 +41,48 @@ class JinBoConfigPanel(val config: JinBoConfig) : JPanel(), GuiEventListener {
       updateEmergencyStopButton(JinBoServer.lifts[config.id]?.emergencyStopped == true)
     }
     add(emergencyStopButton)
-    add(Box.createHorizontalStrut(10))
 
-    // 创建左侧固定标签面板
     val titleLabel = JLabel("电梯配置")
-    val titlePanel = JPanel(BorderLayout())
-    titlePanel.add(titleLabel, BorderLayout.CENTER)
-    titlePanel.preferredSize = Dimension(100, 0) // 设置固定宽度
-    add(titlePanel)
-
-    // 添加水平弹性空间
-    add(Box.createHorizontalGlue())
-
-    // 创建中间配置字段区域，使用水平 BoxLayout
-    val fieldsPanel = JPanel()
-    fieldsPanel.layout = BoxLayout(fieldsPanel, BoxLayout.X_AXIS)
-    fieldsPanel.border = BorderFactory.createEmptyBorder(5, 5, 5, 5)
+    add(titleLabel)
 
     // 添加字段
     for (fieldName in FIELD_NAMES) {
       val fieldLabel = JLabel("$fieldName:")
-      fieldsPanel.add(fieldLabel)
+      add(fieldLabel)
 
-      // 添加水平间距
-      fieldsPanel.add(Box.createHorizontalStrut(5))
-
-      val field = JTextField(15)
+      val field = JTextField(6)
+      field.minimumSize = Dimension(60, field.preferredSize.height)
+      field.maximumSize = Dimension(80, field.preferredSize.height)
       field.setEditable(false) // 初始为只读状态
       fieldInputs[fieldName] = field
-      fieldsPanel.add(field)
-
-      // 添加水平间距
-      fieldsPanel.add(Box.createHorizontalStrut(10))
+      add(field)
     }
 
     logTcpInput = JCheckBox("打印 TCP 报文")
     logTcpInput?.isSelected = config.logTcp
-    fieldsPanel.add(logTcpInput)
-
-    add(fieldsPanel)
-
-    // 添加水平弹性空间
-    add(Box.createHorizontalGlue())
-
-    // 创建右侧按钮区域
-    val buttonPanel = JPanel(FlowLayout(FlowLayout.RIGHT, 5, 0))
+    add(logTcpInput)
 
     // 管理楼层按钮（始终显示）
     val manageFloorsButton = JButton("管理楼层")
     manageFloorsButton.addActionListener(ActionListener { e: ActionEvent? -> showFloorConfigDialog() })
-    buttonPanel.add(manageFloorsButton)
+    add(manageFloorsButton)
 
     // 编辑按钮（查看状态显示）
     val editButton = JButton("编辑")
     editButton.addActionListener(ActionListener { e: ActionEvent? -> enterEditMode() })
-    buttonPanel.add(editButton)
+    add(editButton)
 
     // 保存按钮（编辑状态显示）
     val saveButton = JButton("保存")
     saveButton.addActionListener(ActionListener { e: ActionEvent? -> saveConfig() })
     saveButton.isVisible = false // 初始隐藏
-    buttonPanel.add(saveButton)
+    add(saveButton)
 
     // 取消按钮（编辑状态显示）
     val cancelButton = JButton("取消")
     cancelButton.addActionListener(ActionListener { e: ActionEvent? -> exitEditMode() })
     cancelButton.isVisible = false // 初始隐藏
-    buttonPanel.add(cancelButton)
-
-    add(buttonPanel)
+    add(cancelButton)
 
     // 初始化定时器
     configUpdateTimer = Timer(3000, ActionListener { e: ActionEvent? -> updateConfig() })
@@ -268,12 +243,14 @@ class JinBoConfigPanel(val config: JinBoConfig) : JPanel(), GuiEventListener {
 
     // 填充数据
     for (floor in config.floors.sortedBy { it.index }) {
-      tableModel.addRow(arrayOf(
-        floor.index.toString(),
-        floor.label,
-        floor.height.toString(),
-        if (floor.disabled) "是" else "否"
-      ))
+      tableModel.addRow(
+        arrayOf(
+          floor.index.toString(),
+          floor.label,
+          floor.height.toString(),
+          if (floor.disabled) "是" else "否",
+        ),
+      )
     }
 
     val table = JTable(tableModel)
