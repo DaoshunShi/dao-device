@@ -42,6 +42,18 @@
         <ThresholdFilter level="ERROR" onMatch="ACCEPT" onMismatch="DENY"/>
       </Filters>
     </RollingFile>
+
+    <!-- 文件输出 - 回放帧（JSONL，每行一帧） -->
+    <RollingFile name="ReplayLog"
+                 fileName="${APP_LOG_ROOT}/replay.log"
+                 filePattern="${APP_LOG_ROOT}/replay-%d{yyyy-MM-dd}-%i.log">
+      <PatternLayout pattern="%m%n"/>
+      <Policies>
+        <TimeBasedTriggeringPolicy interval="1" modulate="true"/>
+        <SizeBasedTriggeringPolicy size="10MB"/>
+      </Policies>
+      <DefaultRolloverStrategy max="10"/>
+    </RollingFile>
   </Appenders>
 
   <Loggers>
@@ -50,6 +62,11 @@
       <AppenderRef ref="Console"/>
       <AppenderRef ref="AppLog"/>
 <!--      <AppenderRef ref="ErrorLog"/>-->
+    </Logger>
+
+    <!-- 回放帧日志：独立写入 replay.log，不打印到控制台/应用日志 -->
+    <Logger name="REPLAY" level="INFO" additivity="false">
+      <AppenderRef ref="ReplayLog"/>
     </Logger>
 
     <!-- 根日志配置 -->

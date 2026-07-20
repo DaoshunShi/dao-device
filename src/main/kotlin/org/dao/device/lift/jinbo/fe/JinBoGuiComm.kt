@@ -490,7 +490,9 @@ class LabelCircle2(config: JinBoConfig, val floorIdx: Int, val labelStr: String,
         println("Clicked on LabelCircle")
         active = !active
 
-        JinBoServer.request(config.id, JinBoReq(floorIdx, JinBoReqSource.InDoor))
+        // TCP 栏按钮：记 tcp-btn-goto，与真实 TCP socket 请求(tcp-goto)区分
+        JinBoServer.request(config.id, JinBoReq(floorIdx, JinBoReqSource.Tcp), log = false)
+        JinBoServer.logEvent(config.id, LiftEvent("tcp-btn-goto", "destFloor=$floorIdx"))
 
         repaint()
       }

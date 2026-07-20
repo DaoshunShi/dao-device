@@ -1,5 +1,6 @@
 package org.dao.device.lift.jinbo
 
+import org.dao.device.common.JsonHelper
 import org.dao.device.lift.jinbo.fe.LiftEvent
 import org.slf4j.LoggerFactory
 import java.util.*
@@ -87,6 +88,8 @@ object JinBoServer {
       logAll()
 
       if (lr.emergencyStopped) {
+        // 急停期间也录制一帧，保证时间轴连续
+        JinBoRecorder.capture(lr)
         return
       }
 
@@ -104,6 +107,9 @@ object JinBoServer {
 
       // 更新门的状态
       updateDoorState(lr)
+
+      // 录制本 tick 的状态快照
+      JinBoRecorder.capture(lr)
     }
   }
 
@@ -284,13 +290,23 @@ object JinBoServer {
   /**
    * 请求电梯到指定楼层
    */
-  fun request(liftId: String, req: JinBoReq): JinBoResp {
+  fun request(liftId: String, req: JinBoReq, log: Boolean = true): JinBoResp {
     val lift = mustGetLift(liftId)
     synchronized(lift) {
       if (lift.emergencyStopped) {
         return JinBoResp("409", EMERGENCY_STOP_MSG)
       }
       lift.reqs.add(req)
+    }
+    // 按来源统一打呼梯日志：梯外 out-goto / 梯内 in-goto / TCP tcp-goto
+    // 开门按钮虽走 InDoor 请求，但需打 in-open，故由调用方传 log=false 自行打印
+    if (log) {
+      val prefix = when (req.source) {
+        JinBoReqSource.OutDoor -> "out-goto"
+        JinBoReqSource.InDoor -> "in-goto"
+        JinBoReqSource.Tcp -> "tcp-goto"
+      }
+      logEvent(liftId, LiftEvent(prefix, JsonHelper.writeValueAsString(req)))
     }
     return JinBoResp()
   }
@@ -383,6 +399,7 @@ object JinBoServer {
    * 在页面上打印日志
    */
   fun logEvent(liftId: String, e: LiftEvent) {
+    JinBoRecorder.bufferLog(liftId, "${e.topic}:${e.msg}")
     lifts[liftId]?.frame?.logEvent(e)
   }
 }

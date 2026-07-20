@@ -150,6 +150,24 @@ data class JinBoReq(
 )
 
 /**
+ * 回放帧：某一仿真 tick 的电梯可视状态快照 + 该帧窗口内的事件日志
+ *
+ * reqs 可还原 outside/inside/tcp 三个事件（按 source 过滤）；
+ * h/doorStatus/emergencyStopped 可还原 liftState 事件。
+ */
+data class JinBoFrame(
+  val liftId: String,
+  val ts: Long, // 采集时刻，System.currentTimeMillis()
+  val curFloor: Int,
+  val h: Double,
+  val liftStatus: JinBoLiftStatus,
+  val doorStatus: JinBoDoorStatus,
+  val emergencyStopped: Boolean,
+  val reqs: List<JinBoReq>, // 请求快照
+  val logs: List<String>, // 本帧窗口内产生的事件日志行
+)
+
+/**
  * 电梯请求来源
  */
 enum class JinBoReqSource {
