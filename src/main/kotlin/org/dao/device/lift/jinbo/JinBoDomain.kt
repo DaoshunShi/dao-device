@@ -114,7 +114,10 @@ data class JinBoRuntime(
     config.closeCost = newCfg.closeCost
     config.closeDelay = newCfg.closeDelay
     config.logTcp = newCfg.logTcp
+    config.connLimit = newCfg.connLimit
 
+    // 连接数上限热更新到运行中的 TCP 服务器（不需重启）
+    tcpServer?.connLimit = newCfg.connLimit
     tcpServer?.updatePort(newCfg.port, newCfg.logTcp)
   }
 
