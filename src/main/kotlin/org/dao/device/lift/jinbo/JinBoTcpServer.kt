@@ -234,6 +234,21 @@ class CustomProtocolEncoder : MessageToByteEncoder<ProtocolMessage>() {
 // 服务器业务处理器
 class ServerHandler(val liftId: String, val server: JinBoTcpServer) : SimpleChannelInboundHandler<ProtocolMessage>() {
   private val logger = LoggerFactory.getLogger(javaClass)
+
+  // 本连接是否已计入 connectionCount：保证 +1/-1 各恰好一次，
+  // 避免 exceptionCaught 先减、其 ctx.close() 又触发 channelInactive 再减导致重复递减。
+  private val counted = AtomicBoolean(false)
+
+  private fun releaseSlot() {
+    if (counted.compareAndSet(true, false)) {
+      server.connectionLock.withLock {
+        if (server.connectionCount.get() > 0) {
+          server.connectionCount.getAndAdd(-1)
+        }
+      }
+    }
+  }
+
   override fun channelRead0(ctx: ChannelHandlerContext, msg: ProtocolMessage) {
     // 处理接收到的消息
     // logger.debug("Received message:")
@@ -270,9 +285,9 @@ class ServerHandler(val liftId: String, val server: JinBoTcpServer) : SimpleChan
 
     // 示例响应
     val response = ProtocolMessage(
-      msg.flowNo, // 使用相同的流水号
-      msg.flowNo + 100000, // 响应指令编号
-      respStr.length,
+      msg.flowNo, // 使用相同的流水号做请求/响应关联
+      msg.command or 0x8000, // 响应指令 = 请求指令高位置 1；command 编码为 2 字节 short，值必须落在 0..0xFFFF
+      respStr.toByteArray(StandardCharsets.UTF_8).size,
       respStr,
     )
 
@@ -280,15 +295,10 @@ class ServerHandler(val liftId: String, val server: JinBoTcpServer) : SimpleChan
   }
 
   override fun exceptionCaught(ctx: ChannelHandlerContext, cause: Throwable) {
-    server.connectionLock.withLock {
-      if (server.connectionCount.get() > 0) {
-        server.connectionCount.getAndAdd(-1)
-      }
-
-      logger.error("Exception caught: ${cause.message}")
-      JinBoServer.logEvent(liftId, LiftEvent("Tcp exception", cause.message ?: ""))
-      ctx.close()
-    }
+    logger.error("Exception caught: ${cause.message}")
+    JinBoServer.logEvent(liftId, LiftEvent("Tcp exception", cause.message ?: ""))
+    // 只关闭连接；计数递减统一交给 channelInactive，避免重复扣减
+    ctx.close()
   }
 
   override fun channelActive(ctx: ChannelHandlerContext?) {
@@ -300,6 +310,7 @@ class ServerHandler(val liftId: String, val server: JinBoTcpServer) : SimpleChan
       }
 
       server.connectionCount.getAndAdd(1)
+      counted.set(true)
 
       val msg = "Client connected: ${ctx?.channel()?.remoteAddress()}"
       JinBoServer.logEvent(liftId, LiftEvent("Connected", msg))
@@ -308,17 +319,12 @@ class ServerHandler(val liftId: String, val server: JinBoTcpServer) : SimpleChan
   }
 
   override fun channelInactive(ctx: ChannelHandlerContext?) {
-    server.connectionLock.withLock {
-      if (server.connectionCount.get() > 0) {
-        server.connectionCount.getAndAdd(-1)
-      }
-
-      val msg = "Client disconnected: ${ctx?.channel()?.remoteAddress()}"
-      logger.error(msg)
-      JinBoServer.logEvent(liftId, LiftEvent("DisConnected", msg))
-      ctx?.close()
-      super.channelInactive(ctx)
-    }
+    releaseSlot()
+    val msg = "Client disconnected: ${ctx?.channel()?.remoteAddress()}"
+    logger.error(msg)
+    JinBoServer.logEvent(liftId, LiftEvent("DisConnected", msg))
+    ctx?.close()
+    super.channelInactive(ctx)
   }
 }
 

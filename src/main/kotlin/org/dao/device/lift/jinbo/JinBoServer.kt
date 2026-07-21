@@ -73,7 +73,12 @@ object JinBoServer {
   private fun process() {
     while (!Thread.interrupted()) {
       for (lift in lifts.values) {
-        processLift(lift)
+        try {
+          processLift(lift)
+        } catch (e: Exception) {
+          // 单部电梯处理异常不应终止整个仿真线程，否则所有电梯静默停摆
+          logger.error("processLift failed for ${lift.config.id}: ${e.message}", e)
+        }
       }
       Thread.sleep(1000)
     }
@@ -141,7 +146,7 @@ object JinBoServer {
           it.destFloor < lr.curFloor || (it.destFloor == lr.curFloor && lr.canOpenDoor())
         }.maxByOrNull { it.destFloor }
 
-        JinBoLiftStatus.Idle -> lr.reqs.minByOrNull { it.destFloor - lr.curFloor }
+        JinBoLiftStatus.Idle -> lr.reqs.minByOrNull { abs(it.destFloor - lr.curFloor) }
       }?.destFloor
     if (lr.targetFloor != null) {
       lr.liftStatus = if (lr.targetFloor!! > lr.curFloor) {

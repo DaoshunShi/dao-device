@@ -4,6 +4,7 @@ import com.fasterxml.jackson.annotation.JsonIgnore
 import org.dao.device.lift.jinbo.fe.LiftFrame
 import java.util.Date
 import java.util.concurrent.CopyOnWriteArrayList
+import kotlin.math.abs
 
 data class JinBoConfig(
   val id: String, // 电梯 ID
@@ -107,7 +108,7 @@ data class JinBoRuntime(
   /**
    * 正好在楼层里，可以开关门
    */
-  fun canOpenDoor(): Boolean = config.floors.any { it.height == h }
+  fun canOpenDoor(): Boolean = config.floors.any { abs(it.height - h) < FLOOR_EPS }
 
   fun updateCfg(newCfg: JinBoConfig) {
     config.port = newCfg.port
@@ -118,6 +119,11 @@ data class JinBoRuntime(
     config.logTcp = newCfg.logTcp
 
     tcpServer?.updatePort(newCfg.port, newCfg.logTcp)
+  }
+
+  companion object {
+    // 楼层高度浮点比较容差（米）：h 由步进累加得到，不能用 == 直接比较
+    private const val FLOOR_EPS = 1e-6
   }
 }
 
