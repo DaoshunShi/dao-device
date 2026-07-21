@@ -40,9 +40,6 @@ data class JinBoRuntime(
   @JsonIgnore
   val config: JinBoConfig,
 ) {
-  // @Volatile
-  // var disabled = false // 电梯停用
-
   @Volatile
   var curFloor: Int = 0 // 当前楼层。电梯从 1 层开始，0 是一个合适的默认值
 

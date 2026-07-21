@@ -89,17 +89,11 @@ object JinBoServer {
    */
   fun processLift(lr: JinBoRuntime) {
     synchronized(lr) {
-      // 打印日志
-      logAll()
-
       if (lr.emergencyStopped) {
         // 急停期间也录制一帧，保证时间轴连续
         JinBoRecorder.capture(lr)
         return
       }
-
-      // 清理原本的任务
-      // cleanCurrentFloorReq(lr)
 
       // 选择更优的任务
       selectBetterReq(lr)
@@ -279,20 +273,6 @@ object JinBoServer {
   }
 
   /**
-   * TODO 单纯的开门。
-   *
-   * 如果电梯此时在某楼层，就开门
-   * 如果电梯此时在运行中，就不要开门
-   */
-  fun open(liftId: String): JinBoResp {
-    val lr = mustGetLift(liftId)
-    synchronized(lr) {
-      // TODO
-    }
-    return JinBoResp()
-  }
-
-  /**
    * 请求电梯到指定楼层
    */
   fun request(liftId: String, req: JinBoReq, log: Boolean = true): JinBoResp {
@@ -392,13 +372,6 @@ object JinBoServer {
   fun getLifts(): List<JinBoRuntime> = lifts.values.toList()
 
   private fun mustGetLift(liftId: String): JinBoRuntime = lifts[liftId] ?: throw RuntimeException("$liftId 电梯不存在")
-
-  /**
-   * 打印所有日志
-   */
-  private fun logAll() {
-    // logger.info("logAll: ${JsonHelper.mapper.writeValueAsString(lifts.values)}")
-  }
 
   /**
    * 在页面上打印日志

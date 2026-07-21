@@ -16,7 +16,6 @@ import java.nio.charset.StandardCharsets
 import java.util.concurrent.atomic.AtomicBoolean
 import java.util.concurrent.atomic.AtomicInteger
 import java.util.concurrent.locks.ReentrantLock
-import java.util.concurrent.locks.ReentrantReadWriteLock
 import kotlin.concurrent.withLock
 
 class JinBoTcpServer(
@@ -36,8 +35,6 @@ class JinBoTcpServer(
 
   val connectionLock = ReentrantLock()
 
-  // private val readLock = connectionLock.readLock()
-  // private val writeLock = connectionLock.writeLock()
   val connectionCount = AtomicInteger(0)
 
   fun start() {
@@ -78,8 +75,6 @@ class JinBoTcpServer(
         f.channel().closeFuture().sync()
       } catch (e: Exception) {
         logger.error("Error during server startup: ${e.message}", e)
-      } finally {
-        // shutdownInternal()
       }
     }.apply {
       name = "JinBoTcpServer-$host:$port"
@@ -146,15 +141,6 @@ class CustomProtocolDecoder : ByteToMessageDecoder() {
   @Volatile
   private var started = false
 
-  @Volatile
-  private var bodySize = -1
-
-  @Volatile
-  private var flowNo: Byte = -1
-
-  @Volatile
-  private var command: Int = -1
-
   override fun decode(ctx: ChannelHandlerContext, buf: ByteBuf, out: MutableList<Any>) {
     // 确保有足够的字节可读
     // if (buf.readableBytes() < 8) { // 1 字节(0x5a) + 1 字节(流水号) + 2 字节(指令编号) + 4 字节(长度)
@@ -206,8 +192,6 @@ class CustomProtocolDecoder : ByteToMessageDecoder() {
     out.add(message)
 
     started = false
-    bodySize = -1
-    flowNo = -1
   }
 
   companion object {
@@ -329,5 +313,3 @@ class ServerHandler(val liftId: String, val server: JinBoTcpServer) : SimpleChan
 }
 
 data class JinBoTcpGoToReq(val destFloor: String)
-
-data class JinBoTcpResp(val code: String = "0", val msg: String = "noError")
