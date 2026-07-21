@@ -25,12 +25,17 @@ class LiftFrame(val config: JinBoConfig) : JFrame("JinBo Lift Monitor"), GuiEven
   private var replayer: JinBoReplayer? = null
   private var replaying = false
   private val replayControlRow = JPanel().apply {
-    layout = BoxLayout(this, BoxLayout.Y_AXIS)
+    layout = BorderLayout()
     isVisible = false
+    alignmentX = LEFT_ALIGNMENT
+    // 在 Y_AXIS 中横向拉满、纵向锁高，避免被居中或纵向拉伸
+    maximumSize = Dimension(Int.MAX_VALUE, 90)
   }
   private val playPauseBtn = JButton("▶ 播放")
   private val replayTimeLabel = JLabel("--:--:--")
   private val replayTimeline = ReplayTimeline { ts -> replayer?.seek(ts) }
+  private val replayFileCombo = JComboBox<String>()
+  private var suppressComboEvent = false
 
   // 回放日志三色
   private val colorPlayed = Color(140, 140, 140) // 已播放：灰
@@ -105,6 +110,8 @@ class LiftFrame(val config: JinBoConfig) : JFrame("JinBo Lift Monitor"), GuiEven
         add(
           JPanel().apply {
             layout = BoxLayout(this, BoxLayout.X_AXIS)
+            alignmentX = LEFT_ALIGNMENT
+            maximumSize = Dimension(Int.MAX_VALUE, preferredSize.height.coerceAtLeast(32))
             add(
               JButton("清除日志").apply {
                 addActionListener {
@@ -143,13 +150,22 @@ class LiftFrame(val config: JinBoConfig) : JFrame("JinBo Lift Monitor"), GuiEven
   }
 
   /**
-   * 构建回放控制行：上排按钮（播放/暂停 | 快退 | 快进 | 时间标签），下方时间轴。
+   * 构建回放控制行：上排（文件下拉 | 播放/暂停 | 快退 | 快进 | 时间标签）NORTH，时间轴 CENTER（占满整行）。
    */
   private fun buildReplayControlRow() {
     replayControlRow.removeAll()
 
     val buttonRow = JPanel(FlowLayout(FlowLayout.LEFT, 5, 0)).apply {
-      alignmentX = LEFT_ALIGNMENT
+      add(JLabel("日志文件:"))
+      add(
+        replayFileCombo.apply {
+          addActionListener {
+            if (replaying && !suppressComboEvent) {
+              (selectedItem as? String)?.let { switchReplayFile(it) }
+            }
+          }
+        },
+      )
       add(
         playPauseBtn.apply {
           addActionListener { togglePlayPause() }
@@ -169,9 +185,8 @@ class LiftFrame(val config: JinBoConfig) : JFrame("JinBo Lift Monitor"), GuiEven
       add(replayTimeLabel)
     }
 
-    replayTimeline.alignmentX = LEFT_ALIGNMENT
-    replayControlRow.add(buttonRow)
-    replayControlRow.add(replayTimeline)
+    replayControlRow.add(buttonRow, BorderLayout.NORTH)
+    replayControlRow.add(replayTimeline, BorderLayout.CENTER)
   }
 
   /**
@@ -181,20 +196,26 @@ class LiftFrame(val config: JinBoConfig) : JFrame("JinBo Lift Monitor"), GuiEven
    */
   private fun toggleReplay(on: Boolean) {
     if (on) {
-      val r = JinBoReplayer(config.id)
-      val n = r.load()
-      if (n == 0) {
-        JOptionPane.showMessageDialog(this, "没有可回放的记录（logs/replay.log 为空）")
+      val files = JinBoReplayer.listReplayFiles()
+      if (files.isEmpty()) {
+        JOptionPane.showMessageDialog(this, "没有可回放的记录（logs 下无 replay 日志）")
+        // 取消选中开关
         return
       }
-      r.onFrameChanged = { frames, index -> onReplayFrame(frames, index) }
-      replayer = r
+      replayer = JinBoReplayer(config.id).apply {
+        onFrameChanged = { frames, index, clockTs -> onReplayFrame(frames, index, clockTs) }
+      }
       replaying = true
       replayControlRow.isVisible = true
-      playPauseBtn.text = "▶ 播放"
-      logArea.text = ""
-      replayTimeline.setFrames(r.allFrames)
-      r.seekIndex(0) // 渲染首帧
+
+      // 填充文件下拉（用 suppress 标志避免触发 switch）
+      suppressComboEvent = true
+      replayFileCombo.model = DefaultComboBoxModel(files.toTypedArray())
+      val defaultFile = if (files.contains("replay.log")) "replay.log" else files.last()
+      replayFileCombo.selectedItem = defaultFile
+      suppressComboEvent = false
+
+      loadReplayFile(defaultFile)
       revalidate()
     } else {
       replayer?.dispose()
@@ -204,6 +225,27 @@ class LiftFrame(val config: JinBoConfig) : JFrame("JinBo Lift Monitor"), GuiEven
       logArea.text = ""
       revalidate()
     }
+  }
+
+  /** 加载指定回放文件到当前 replayer，刷新时间轴并停在首帧 */
+  private fun loadReplayFile(fileName: String) {
+    val r = replayer ?: return
+    r.pause()
+    playPauseBtn.text = "▶ 播放"
+    val n = r.load(fileName)
+    logArea.text = ""
+    if (n == 0) {
+      replayTimeline.setFrames(emptyList())
+      JOptionPane.showMessageDialog(this, "该文件中没有电梯 ${config.id} 的回放帧")
+      return
+    }
+    replayTimeline.setFrames(r.allFrames)
+    r.seekIndex(0)
+  }
+
+  /** 切换回放文件（下拉框选择时） */
+  private fun switchReplayFile(fileName: String) {
+    loadReplayFile(fileName)
   }
 
   private fun togglePlayPause() {
@@ -218,12 +260,11 @@ class LiftFrame(val config: JinBoConfig) : JFrame("JinBo Lift Monitor"), GuiEven
   }
 
   /**
-   * 回放帧变化回调：更新时间标签、时间轴游标、日志三色分色。
+   * 回放帧变化回调：更新时间标签、时间轴游标（用虚拟时钟逐秒）、日志三色分色（按帧 index）。
    */
-  private fun onReplayFrame(frames: List<JinBoFrame>, index: Int) {
-    val frame = frames.getOrNull(index) ?: return
-    replayTimeLabel.text = DateFormatUtils.format(Date(frame.ts), "HH:mm:ss")
-    replayTimeline.setCurrent(frame.ts)
+  private fun onReplayFrame(frames: List<JinBoFrame>, index: Int, clockTs: Long) {
+    replayTimeLabel.text = DateFormatUtils.format(Date(clockTs), "HH:mm:ss")
+    replayTimeline.setCurrent(clockTs)
     renderReplayLogs(frames, index)
     // 播放到末尾时，按钮回到“播放”
     if (replayer?.isPlaying != true) {

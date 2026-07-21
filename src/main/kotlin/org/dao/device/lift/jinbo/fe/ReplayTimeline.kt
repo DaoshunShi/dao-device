@@ -1,7 +1,9 @@
 package org.dao.device.lift.jinbo.fe
 
 import org.apache.commons.lang3.time.DateFormatUtils
+import org.dao.device.lift.jinbo.JinBoDoorStatus
 import org.dao.device.lift.jinbo.JinBoFrame
+import org.dao.device.lift.jinbo.JinBoLiftStatus
 import java.awt.BasicStroke
 import java.awt.Color
 import java.awt.Dimension
@@ -16,8 +18,9 @@ import javax.swing.JPanel
 /**
  * 回放时间轴
  *
- * 只显示当前帧所在“自然整点小时”窗口 [hourStart, hourStart+1h)。
+ * 固定显示当前帧所在“自然整点小时”窗口 [hourStart, hourStart+1h)，不满一小时也铺满整小时。
  * 当前帧跨小时时窗口整块切换。轨道横向占满整行。
+ * 轨道上方为秒格状态条：按每秒电梯状态分层标色（当前秒/移动/有请求/无）。
  * 点击或拖动 → 映射到窗口内时间 → 回调 onSeek(ts)。
  */
 class ReplayTimeline(
@@ -26,18 +29,32 @@ class ReplayTimeline(
 
   companion object {
     private const val HOUR_MS = 3600_000L
+    private const val HOUR_SEC = 3600
     private const val TICK_MS = 300_000L // 刻度间隔：5 分钟
+
+    // 秒格状态
+    private const val S_NONE = 0 // 无移动无请求
+    private const val S_REQ = 1 // 有请求
+    private const val S_MOVE = 2 // 电梯移动中
+
+    private val COLOR_NONE = Color(230, 230, 230)
+    private val COLOR_REQ = Color(245, 170, 70) // 橙：有请求
+    private val COLOR_MOVE = Color(90, 170, 240) // 蓝：移动中
+    private val COLOR_CURRENT = Color(220, 60, 60) // 红：当前秒
   }
 
   private var frames: List<JinBoFrame> = emptyList()
   private var currentTs: Long = 0
   private var windowStart: Long = 0 // 当前可视小时窗起点（整点）
 
+  // 窗口内每秒的状态（S_NONE/S_REQ/S_MOVE），下标 0..3599
+  private var secStates = IntArray(HOUR_SEC)
+
   init {
     background = Color.WHITE
-    preferredSize = Dimension(0, 44)
-    // 在 BoxLayout.Y_AXIS 中允许横向拉伸占满整行（高度锁定 44）
-    maximumSize = Dimension(Int.MAX_VALUE, 44)
+    preferredSize = Dimension(0, 56)
+    // 在 BoxLayout.Y_AXIS 中允许横向拉伸占满整行（高度锁定）
+    maximumSize = Dimension(Int.MAX_VALUE, 56)
     val onMouse = { x: Int ->
       if (frames.isNotEmpty()) onSeek(xToTs(x))
     }
@@ -50,23 +67,63 @@ class ReplayTimeline(
     })
   }
 
-  /** 设置帧序列（打开回放时调用一次） */
+  /** 设置帧序列（打开回放/切换文件时调用一次） */
   fun setFrames(frames: List<JinBoFrame>) {
     this.frames = frames
     currentTs = frames.firstOrNull()?.ts ?: 0
     windowStart = hourFloor(currentTs)
+    rebuildSecStates()
     repaint()
   }
 
-  /** 更新游标到指定帧时间；跨小时则切换窗口 */
+  /** 更新游标到指定帧时间；跨小时则切换窗口并重算秒格 */
   fun setCurrent(ts: Long) {
+    val newWindow = hourFloor(ts)
     currentTs = ts
-    windowStart = hourFloor(ts)
+    if (newWindow != windowStart) {
+      windowStart = newWindow
+      rebuildSecStates()
+    }
     repaint()
   }
 
   private fun hourFloor(ts: Long): Long = (ts / HOUR_MS) * HOUR_MS
   private val windowEnd get() = windowStart + HOUR_MS
+
+  /**
+   * 重算窗口内每秒状态：帧是稀疏的（去重），某秒状态 = ts <= 该秒的最后一帧。
+   */
+  private fun rebuildSecStates() {
+    val states = IntArray(HOUR_SEC)
+    if (frames.isEmpty()) {
+      secStates = states
+      return
+    }
+    // 对每一秒，取该秒起点时间上不晚于它的最后一帧
+    var fi = 0
+    var lastState = S_NONE
+    // 找到窗口起点之前的最后一帧作为初值
+    while (fi < frames.size && frames[fi].ts < windowStart) {
+      lastState = frameState(frames[fi])
+      fi++
+    }
+    for (sec in 0 until HOUR_SEC) {
+      val secTs = windowStart + sec * 1000L
+      while (fi < frames.size && frames[fi].ts <= secTs + 999) {
+        lastState = frameState(frames[fi])
+        fi++
+      }
+      states[sec] = lastState
+    }
+    secStates = states
+  }
+
+  private fun frameState(f: JinBoFrame): Int = when {
+    f.liftStatus == JinBoLiftStatus.Up || f.liftStatus == JinBoLiftStatus.Down -> S_MOVE
+    // 有请求，或门处于非关闭状态（开门/关门中、开着）→ 活跃（橙）
+    f.reqs.isNotEmpty() || f.doorStatus != JinBoDoorStatus.CLOSE -> S_REQ
+    else -> S_NONE
+  }
 
   /** 时间 → x 像素（基于当前小时窗，占满整行） */
   private fun tsToX(ts: Long): Int {
@@ -91,25 +148,26 @@ class ReplayTimeline(
       return
     }
 
-    val trackY = height / 2
+    val stripTop = 4
+    val stripH = 12
+    val trackY = stripTop + stripH + 14
+
+    // 秒格状态条：逐像素列映射到秒，取该秒状态着色
+    drawSecStrip(g2, stripTop, stripH)
 
     // 轨道基线（占满整行）
     g2.color = Color(210, 210, 210)
     g2.stroke = BasicStroke(2f)
     g2.drawLine(0, trackY, width, trackY)
 
-    // 已播放段（窗口起点..当前）着深色
-    g2.color = Color(120, 170, 240)
-    g2.drawLine(0, trackY, tsToX(currentTs), trackY)
-
     // 窗口内每 5 分钟刻度 + 标签
     drawTicks(g2, trackY)
 
-    // 游标
+    // 游标（贯穿秒格条与轨道）
     val cx = tsToX(currentTs)
-    g2.color = Color(220, 60, 60)
+    g2.color = COLOR_CURRENT
     g2.stroke = BasicStroke(2f)
-    g2.drawLine(cx, trackY - 12, cx, trackY + 12)
+    g2.drawLine(cx, stripTop, cx, trackY + 8)
     g2.fillOval(cx - 4, trackY - 4, 8, 8)
 
     // 游标时间标签
@@ -117,7 +175,28 @@ class ReplayTimeline(
     val label = DateFormatUtils.format(currentTs, "HH:mm:ss")
     val lw = g2.fontMetrics.stringWidth(label)
     val lx = (cx - lw / 2).coerceIn(0, (width - lw).coerceAtLeast(0))
-    g2.drawString(label, lx, trackY - 16)
+    g2.drawString(label, lx, trackY + 20)
+  }
+
+  /** 逐像素列绘制秒格状态条；当前秒用红色覆盖 */
+  private fun drawSecStrip(g2: Graphics2D, top: Int, h: Int) {
+    val w = width.coerceAtLeast(1)
+    val curSec = ((currentTs - windowStart) / 1000L).toInt().coerceIn(0, HOUR_SEC - 1)
+    for (x in 0 until w) {
+      val sec = (x.toDouble() / w * HOUR_SEC).toInt().coerceIn(0, HOUR_SEC - 1)
+      val color = when {
+        sec == curSec -> COLOR_CURRENT
+        secStates[sec] == S_MOVE -> COLOR_MOVE
+        secStates[sec] == S_REQ -> COLOR_REQ
+        else -> COLOR_NONE
+      }
+      g2.color = color
+      g2.drawLine(x, top, x, top + h)
+    }
+    // 边框
+    g2.color = Color(180, 180, 180)
+    g2.stroke = BasicStroke(1f)
+    g2.drawRect(0, top, w - 1, h)
   }
 
   /** 窗口内每 5 分钟画刻度；整点、半点标 HH:mm，其余标 mm */
@@ -127,7 +206,7 @@ class ReplayTimeline(
     var t = windowStart
     while (t <= windowEnd) {
       val x = tsToX(t)
-      g2.drawLine(x, trackY - 6, x, trackY + 6)
+      g2.drawLine(x, trackY - 5, x, trackY + 5)
       val minute = ((t - windowStart) / 60_000L).toInt()
       val text = if (minute == 0 || minute == 60) {
         DateFormatUtils.format(t, "HH:mm")
@@ -136,7 +215,7 @@ class ReplayTimeline(
       }
       val w = g2.fontMetrics.stringWidth(text)
       val tx = (x - w / 2).coerceIn(0, (width - w).coerceAtLeast(0))
-      g2.drawString(text, tx, trackY + 20)
+      g2.drawString(text, tx, trackY + 18)
       t += TICK_MS
     }
   }
