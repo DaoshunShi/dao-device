@@ -22,6 +22,7 @@ data class JinBoConfig(
   var logTcp: Boolean = false, // 是否记录 TCP 日志
   @Volatile
   var connLimit: Int = 1, // TCP client 连接数限制
+  val disabled: Boolean = false, // 整部电梯停用：为 true 时不启动该电梯
 )
 
 data class JinBoFloor(

@@ -23,9 +23,15 @@ object JinBoRepo {
     }
 
     val lifts = mutableListOf<JinBoRuntime>()
+    var anyParsed = false // 是否至少成功解析了一个配置文件（含被禁用的）
     for (configFile in configFiles) {
       try {
         val config = JsonHelper.mapper.readValue(configFile, JinBoConfig::class.java)
+        anyParsed = true
+        if (config.disabled) {
+          println("Skipped disabled elevator from ${configFile.name}: ${config.id}")
+          continue
+        }
         lifts.add(JinBoRuntime(config))
         println("Loaded elevator configuration from ${configFile.name}: ${config.id} with ${config.floors.size} floors")
       } catch (e: Exception) {
@@ -33,8 +39,9 @@ object JinBoRepo {
       }
     }
 
-    // 如果没有任何配置文件加载成功，使用默认配置
-    if (lifts.isEmpty()) {
+    // 仅当所有配置文件都解析失败时才回退到默认配置；
+    // 若配置能解析但全部被禁用，则返回空（尊重用户的禁用意图，不启动默认电梯）。
+    if (lifts.isEmpty() && !anyParsed) {
       println("All configuration files failed to load, using default configuration")
       return createDefaultLifts().associateBy { it.config.id }.toMutableMap()
     }
