@@ -102,6 +102,8 @@ class ReplayTimeline(
     // 对每一秒，取该秒起点时间上不晚于它的最后一帧
     var fi = 0
     var lastState = S_NONE
+    // 最后一帧时间：其后的秒尚无录制数据，保持空白（不沿用最后状态）
+    val lastTs = frames.last().ts
     // 找到窗口起点之前的最后一帧作为初值
     while (fi < frames.size && frames[fi].ts < windowStart) {
       lastState = frameState(frames[fi])
@@ -113,7 +115,8 @@ class ReplayTimeline(
         lastState = frameState(frames[fi])
         fi++
       }
-      states[sec] = lastState
+      // 超过最后录制帧的秒：无数据，空白
+      states[sec] = if (secTs > lastTs) S_NONE else lastState
     }
     secStates = states
   }

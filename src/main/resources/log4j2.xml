@@ -16,16 +16,25 @@
       </PatternLayout>
     </Console>
 
-    <!-- 文件输出 - 应用日志 -->
+    <!-- 文件输出 - 应用日志（按小时拆分，最多保留 7 天、最多 100 个） -->
     <RollingFile name="AppLog"
                  fileName="${APP_LOG_ROOT}/device.log"
-                 filePattern="${APP_LOG_ROOT}/device-%d{yyyy-MM-dd}-%i.log">
+                 filePattern="${APP_LOG_ROOT}/device-%d{yyyy-MM-dd-HH}-%i.log">
       <PatternLayout pattern="${LOG_PATTERN}"/>
       <Policies>
         <TimeBasedTriggeringPolicy interval="1" modulate="true"/>
         <SizeBasedTriggeringPolicy size="10MB"/>
       </Policies>
-      <DefaultRolloverStrategy max="10"/>
+      <DefaultRolloverStrategy max="100">
+        <Delete basePath="${APP_LOG_ROOT}" maxDepth="1">
+          <IfFileName glob="device-*.log">
+            <IfAny>
+              <IfLastModified age="P7D"/>
+              <IfAccumulatedFileCount exceeds="100"/>
+            </IfAny>
+          </IfFileName>
+        </Delete>
+      </DefaultRolloverStrategy>
     </RollingFile>
 
     <!-- 文件输出 - 错误日志 -->
@@ -43,16 +52,25 @@
       </Filters>
     </RollingFile>
 
-    <!-- 文件输出 - 回放帧（JSONL，每行一帧） -->
+    <!-- 文件输出 - 回放帧（JSONL，每行一帧；按小时拆分，最多保留 7 天、最多 100 个） -->
     <RollingFile name="ReplayLog"
                  fileName="${APP_LOG_ROOT}/replay.log"
-                 filePattern="${APP_LOG_ROOT}/replay-%d{yyyy-MM-dd}-%i.log">
+                 filePattern="${APP_LOG_ROOT}/replay-%d{yyyy-MM-dd-HH}-%i.log">
       <PatternLayout pattern="%m%n"/>
       <Policies>
         <TimeBasedTriggeringPolicy interval="1" modulate="true"/>
         <SizeBasedTriggeringPolicy size="10MB"/>
       </Policies>
-      <DefaultRolloverStrategy max="10"/>
+      <DefaultRolloverStrategy max="100">
+        <Delete basePath="${APP_LOG_ROOT}" maxDepth="1">
+          <IfFileName glob="replay-*.log">
+            <IfAny>
+              <IfLastModified age="P7D"/>
+              <IfAccumulatedFileCount exceeds="100"/>
+            </IfAny>
+          </IfFileName>
+        </Delete>
+      </DefaultRolloverStrategy>
     </RollingFile>
   </Appenders>
 
