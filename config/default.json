@@ -12,5 +12,6 @@
   "closeCost": 1000,
   "closeDelay": 3000,
   "logTcp": false,
-  "connLimit": 1
+  "connLimit": 1,
+  "disabled": true
 }

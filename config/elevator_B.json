@@ -1,6 +1,7 @@
 {
   "id": "B",
   "port": 8082,
+  "initialFloor": 2,
   "floors": [
     {"index": 1, "label": "地下室", "height": -3.0, "disabled": false},
     {"index": 2, "label": "大堂", "height": 0.0, "disabled": false},
@@ -16,6 +17,5 @@
   "closeCost": 800,
   "closeDelay": 5000,
   "logTcp": true,
-  "connLimit": 2,
-  "disabled": true
+  "connLimit": 2
 }
