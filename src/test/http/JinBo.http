@@ -1,8 +1,23 @@
-### 呼叫电梯
-POST http://localhost:7070/api/lift/A/request
+### 单门电梯 B：前往 3 楼（到站后打开 0 号门，并自动关门）
+POST http://localhost:7070/api/lift/B/request
 Content-Type: application/json
 
 {
- "destFloor": 2
+  "destFloor": 3
 }
+
+### 双门电梯 B：前往 5 楼（需先将“电梯门数量”配置为 2，到站后保持 0、1 号门常开）
+POST http://localhost:7070/api/lift/B/request
+Content-Type: application/json
+
+{
+  "destFloor": 5,
+  "doorCodes": [0, 1]
+}
+
+### 关闭电梯 B 的全部门（关门指令不区分门）
+POST http://localhost:7070/api/lift/B/close
+
+### 查询电梯 B 的状态
+POST http://localhost:7070/api/lift/B
 
