@@ -24,7 +24,20 @@ data class JinBoConfig(
   @Volatile
   var connLimit: Int = 1, // TCP client 连接数限制
   val disabled: Boolean = false, // 整部电梯停用：为 true 时不启动该电梯
-)
+  @Volatile
+  var doorCount: Int = 1, // 电梯门的数量，门编号从 0 开始
+  val initialFloor: Int? = null, // 启动时所在楼层，按 floors 中的 index 匹配；未配置时使用首个可用楼层
+) {
+  init {
+    require(doorCount >= 1) { "电梯门数量必须大于等于 1" }
+    require(floors.isNotEmpty()) { "电梯楼层配置不能为空" }
+    if (initialFloor != null) {
+      val floor = floors.firstOrNull { it.index == initialFloor }
+        ?: throw IllegalArgumentException("启动楼层 $initialFloor 不存在")
+      require(!floor.disabled) { "启动楼层 $initialFloor 已停用" }
+    }
+  }
+}
 
 data class JinBoFloor(
   val index: Int, // 楼层索引
@@ -47,10 +60,17 @@ data class JinBoRuntime(
   var liftStatus: JinBoLiftStatus = JinBoLiftStatus.Idle // 电梯状态
 
   @Volatile
-  var lifting: Boolean = false // 上升、下降中
+  var travelDirection: JinBoLiftStatus = JinBoLiftStatus.Idle // 本轮运行方向，停靠开门期间保持
 
   @Volatile
-  var doorStatus: JinBoDoorStatus = JinBoDoorStatus.CLOSE // 当前楼层门状态
+  var lifting: Boolean = false // 上升、下降中
+
+  /**
+   * 每个门独立的运行状态和计时。门状态与门号一一对应，门编号从 0 开始。
+   */
+  val doors: MutableList<JinBoDoor> = CopyOnWriteArrayList(
+    (0 until config.doorCount).map { JinBoDoor(it) },
+  )
 
   val reqs: MutableList<JinBoReq> = CopyOnWriteArrayList() // 当前电梯的请求
 
@@ -62,10 +82,7 @@ data class JinBoRuntime(
   var targetFloor: Int? = null // 目标楼层
 
   @Volatile
-  var doorOpStartOn: Date? = null // 门操作：开始时间
-
-  @Volatile
-  var doorOpDoneOn: Date? = null // 门操作：完成时间
+  var lastMoveOn: Long? = null // 上一次计算移动位移的时间，单位：ms
 
   @Volatile
   var emergencyStopped: Boolean = false // 是否处于急停状态
@@ -78,16 +95,25 @@ data class JinBoRuntime(
   private var tcpServer: JinBoTcpServer? = null
 
   // 电梯 UI
-  @JsonIgnore
-  val frame = LiftFrame(config)
+  @get:JsonIgnore
+  val frame by lazy { LiftFrame(config) }
 
   fun init() {
+    setInitialFloor()
     tcpServer = JinBoTcpServer(config.id, "0.0.0.0", config.port, config.logTcp, config.connLimit)
     tcpServer?.start()
 
-    curFloor = config.floors.first().index
-
     frame.isVisible = true
+  }
+
+  /** 按 JSON 的 initialFloor 设置启动楼层；未配置时使用首个可用楼层。 */
+  fun setInitialFloor() {
+    val initialFloor = config.initialFloor
+      ?.let { index -> config.floors.first { it.index == index } }
+      ?: config.floors.firstOrNull { !it.disabled }
+      ?: throw IllegalStateException("电梯 ${config.id} 没有可用楼层")
+    curFloor = initialFloor.index
+    h = initialFloor.height
   }
 
   fun dispose() {
@@ -100,7 +126,17 @@ data class JinBoRuntime(
   /**
    * 电梯允许上下行
    */
-  fun canLifting(): Boolean = doorStatus != JinBoDoorStatus.CLOSE
+  fun canLifting(): Boolean = doors.all { it.status == JinBoDoorStatus.CLOSE }
+
+  /** 电梯是否正在驶向其他楼层；移动中的门操作应被拒绝。 */
+  fun isMoving(): Boolean = lifting
+
+  /** 门是否正在开启、保持开门或关门；到站停留期间不选择下一段行程。 */
+  fun holdAtCurrentFloor(): Boolean = doors.any { door ->
+    door.status == JinBoDoorStatus.OPEN ||
+      door.status == JinBoDoorStatus.OPENING ||
+      door.status == JinBoDoorStatus.CLOSING
+  }
 
   /**
    * 正好在楼层里，可以开关门
@@ -108,6 +144,8 @@ data class JinBoRuntime(
   fun canOpenDoor(): Boolean = config.floors.any { abs(it.height - h) < FLOOR_EPS }
 
   fun updateCfg(newCfg: JinBoConfig) {
+    require(newCfg.doorCount >= 1) { "电梯门数量必须大于等于 1" }
+
     config.port = newCfg.port
     config.liftSpeed = newCfg.liftSpeed
     config.openCost = newCfg.openCost
@@ -119,6 +157,26 @@ data class JinBoRuntime(
     // 连接数上限热更新到运行中的 TCP 服务器（不需重启）
     tcpServer?.connLimit = newCfg.connLimit
     tcpServer?.updatePort(newCfg.port, newCfg.logTcp)
+
+    updateDoors(newCfg.doorCount)
+  }
+
+  /** 将门列表调整到指定数量；减少门时同步移除对应门的计时。 */
+  fun updateDoors(newDoorCount: Int) {
+    require(newDoorCount >= 1) { "电梯门数量必须大于等于 1" }
+    if (config.doorCount == newDoorCount && doors.size == newDoorCount) return
+
+    config.doorCount = newDoorCount
+    // 已开的门保持当前状态；新增门从关闭态开始，删除门时一并移除其计时
+    if (doors.size > newDoorCount) {
+      while (doors.size > newDoorCount) {
+        doors.removeAt(doors.lastIndex)
+      }
+    } else {
+      while (doors.size < newDoorCount) {
+        doors.add(JinBoDoor(doors.size))
+      }
+    }
   }
 
   companion object {
@@ -154,13 +212,41 @@ data class JinBoReq(
   val destFloor: Int, // 目标楼层
   val source: JinBoReqSource = JinBoReqSource.Tcp, // 请求来源
   val type: JinBoLiftStatus? = null, // 上行/下行 [仅用于外部请求]
+  @get:JsonIgnore
+  val doorCodes: List<Int> = emptyList(), // 本次停靠需要打开的门号；空表示默认 0 号门
 )
+
+/**
+ * 单个电梯门的运行状态。
+ *
+ * - [openOn] 记录到站或收到同层呼梯的时刻，自动关门延迟从这里开始计算；
+ * - [opStartOn] 记录本次开门或关门操作的开始时间。
+ */
+data class JinBoDoor(
+  val code: Int,
+  var status: JinBoDoorStatus = JinBoDoorStatus.CLOSE,
+  var openOn: Date? = null,
+  var opStartOn: Date? = null,
+) {
+  /** 门开到到位；自动关门计时从到站或收到同层呼梯时开始，不在这里重置。 */
+  fun markOpen(now: Date) {
+    status = JinBoDoorStatus.OPEN
+    openOn = openOn ?: now
+    opStartOn = null
+  }
+
+  fun setStatus(newStatus: JinBoDoorStatus, now: Date) {
+    status = newStatus
+    openOn = if (newStatus == JinBoDoorStatus.CLOSE || newStatus == JinBoDoorStatus.ERROR) null else openOn
+    opStartOn = if (newStatus == JinBoDoorStatus.OPENING || newStatus == JinBoDoorStatus.CLOSING) now else null
+  }
+}
 
 /**
  * 回放帧：某一仿真 tick 的电梯可视状态快照 + 该帧窗口内的事件日志
  *
  * reqs 可还原 outside/inside/tcp 三个事件（按 source 过滤）；
- * h/doorStatus/emergencyStopped 可还原 liftState 事件。
+ * h/doorStatus/doors/emergencyStopped 可还原 liftState 事件。
  */
 data class JinBoFrame(
   val liftId: String,
@@ -172,6 +258,7 @@ data class JinBoFrame(
   val emergencyStopped: Boolean,
   val reqs: List<JinBoReq>, // 请求快照
   val logs: List<String>, // 本帧窗口内产生的事件日志行
+  val doors: List<JinBoDoor> = emptyList(), // 多门快照；旧回放帧缺失该字段时为空
 )
 
 /**
@@ -192,17 +279,45 @@ data class JinBoResp(val code: String = "0", val msg: String = "noError")
  * 电梯状态的响应
  */
 data class JinBoStatusResp(
+  val retCode: Int = 0,
+  val retMsg: String = "success",
   val currentFloor: String, // 当前楼层
-  val doorStatus: JinBoDoorStatus, // 当前门的状态
+  val doorStatus: JinBoDoorStatus, // 兼容单门调用方：聚合门状态
   val emergencyStopped: Boolean, // 是否处于急停状态
-  val code: String = "0",
-  val msg: String = "noError",
+  val doors: List<JinBoDoorResp> = emptyList(), // 每个门的独立状态
+  val destFloor: Int? = null, // 当前目标楼层
+  val disabled: Boolean = false, // 是否停用（运行中的电梯始终为 false）
+  val autoMode: Boolean = true,
+  val fault: Boolean = false,
+  val people: Int = 0,
+  val code: String = "0", // 兼容旧响应字段
+  val msg: String = "noError", // 兼容旧响应字段
 ) {
   companion object {
-    fun of(runtime: JinBoRuntime): JinBoStatusResp = JinBoStatusResp(
-      runtime.curFloor.toString(),
-      runtime.doorStatus,
-      runtime.emergencyStopped,
-    )
+    fun of(runtime: JinBoRuntime): JinBoStatusResp {
+      val doorStatus = runtime.doors.firstOrNull { it.status != JinBoDoorStatus.CLOSE }?.status
+        ?: JinBoDoorStatus.CLOSE
+      return JinBoStatusResp(
+        currentFloor = runtime.curFloor.toString(),
+        doorStatus = doorStatus,
+        emergencyStopped = runtime.emergencyStopped,
+        doors = runtime.doors.map { door ->
+          val openStatus = when (door.status) {
+            JinBoDoorStatus.OPEN -> 1
+            JinBoDoorStatus.CLOSE -> 2
+            JinBoDoorStatus.OPENING -> 3
+            JinBoDoorStatus.CLOSING -> 4
+            JinBoDoorStatus.ERROR -> 0
+          }
+          JinBoDoorResp(door.code, openStatus)
+        },
+        destFloor = runtime.targetFloor,
+        disabled = runtime.config.disabled,
+        fault = runtime.emergencyStopped,
+      )
+    }
   }
 }
+
+/** 外部查询协议中的门状态：0=未启用，1=已开门，2=已关门，3=开门中，4=关门中。 */
+data class JinBoDoorResp(val code: Int, val openStatus: Int)

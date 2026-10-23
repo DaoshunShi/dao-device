@@ -246,7 +246,7 @@ class ServerHandler(val liftId: String, val server: JinBoTcpServer) : SimpleChan
         // 到指定楼层
         val req: JinBoTcpGoToReq = JsonHelper.mapper.readValue(msg.data, jacksonTypeRef())
         // tcp-goto 日志由 JinBoServer.request 按来源统一打印，此处不再重复
-        val resp = JinBoServer.request(liftId, JinBoReq(req.destFloor.toInt()))
+        val resp = JinBoServer.request(liftId, JinBoReq(req.destFloor.toInt(), doorCodes = req.doorCodes))
         JsonHelper.writeValueAsString(resp)
       }
 
@@ -312,4 +312,7 @@ class ServerHandler(val liftId: String, val server: JinBoTcpServer) : SimpleChan
   }
 }
 
-data class JinBoTcpGoToReq(val destFloor: String)
+data class JinBoTcpGoToReq(
+  val destFloor: String,
+  val doorCodes: List<Int> = emptyList(),
+)

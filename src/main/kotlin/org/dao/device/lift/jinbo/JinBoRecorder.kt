@@ -42,6 +42,7 @@ object JinBoRecorder {
     val liftId = lr.config.id
     val logs = logBuf.remove(liftId).orEmpty().toList()
     val reqs = lr.reqs.toList()
+    val doors = lr.doors.map { it.copy() }
 
     // 去重指纹：仅可视相关字段。用结构化快照 + == 比较（复用 JinBoReq 的 data class 结构相等），
     // 避免字符串拼接的分配开销与拼接歧义。
@@ -49,9 +50,10 @@ object JinBoRecorder {
       curFloor = lr.curFloor,
       h = lr.h,
       liftStatus = lr.liftStatus,
-      doorStatus = lr.doorStatus,
+      doorStatus = aggregateDoorStatus(doors),
       emergencyStopped = lr.emergencyStopped,
       reqs = reqs,
+      doors = doors,
     )
     if (logs.isEmpty() && snapshot == lastKey[liftId]) {
       return // 状态无变化且无日志，跳过写盘
@@ -64,12 +66,24 @@ object JinBoRecorder {
       curFloor = lr.curFloor,
       h = lr.h,
       liftStatus = lr.liftStatus,
-      doorStatus = lr.doorStatus,
+      doorStatus = aggregateDoorStatus(doors),
       emergencyStopped = lr.emergencyStopped,
       reqs = reqs,
       logs = logs,
+      doors = doors,
     )
     replayLog.info(JsonHelper.mapper.writeValueAsString(frame))
+  }
+
+  /** 兼容旧帧字段：状态不一致时优先保留异常和门动作。 */
+  private fun aggregateDoorStatus(doors: List<JinBoDoor>): JinBoDoorStatus =
+    doors.minByOrNull(::displayPriority)?.status ?: JinBoDoorStatus.CLOSE
+
+  private fun displayPriority(door: JinBoDoor): Int = when (door.status) {
+    JinBoDoorStatus.ERROR -> 0
+    JinBoDoorStatus.OPENING, JinBoDoorStatus.CLOSING -> 1
+    JinBoDoorStatus.OPEN -> 2
+    JinBoDoorStatus.CLOSE -> 3
   }
 
   /** 去重快照：可视相关字段，用于判断相邻帧是否发生可见变化 */
@@ -80,5 +94,6 @@ object JinBoRecorder {
     val doorStatus: JinBoDoorStatus,
     val emergencyStopped: Boolean,
     val reqs: List<JinBoReq>,
+    val doors: List<JinBoDoor>,
   )
 }

@@ -197,6 +197,7 @@ class JinBoReplayer(private val liftId: String) {
           mapOf(
             "h" to frame.h,
             "status" to frame.doorStatus,
+            "doors" to frame.doors,
             "emergencyStopped" to frame.emergencyStopped,
           ),
         )),
