@@ -92,6 +92,7 @@ object JinBoRepo {
       val config = runtime.config
       println("  Elevator $id:")
       println("    - Port: ${config.port}")
+      println("    - Initial floor: ${config.initialFloor ?: "first enabled"}")
       println("    - Floors: ${config.floors.size}")
       println("    - Enabled floors: ${config.floors.count { !it.disabled }}")
       println("    - Floor details:")
