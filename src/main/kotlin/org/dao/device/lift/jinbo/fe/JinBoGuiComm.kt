@@ -28,6 +28,8 @@ class Cage(
   GuiEventListener {
   private var elevatorHeightMeters = h0 // 电梯当前高度（米）
   private var status = status0
+  private var doors: List<JinBoDoor> = listOf(JinBoDoor(code = 0, status = status0))
+  private var carWidth: Int = lw // 梯厢宽度随门数动态调整
   private val maxHeight: Double
   private val minHeight: Double
 
@@ -94,62 +96,22 @@ class Cage(
     g2d.setRenderingHint(RenderingHints.KEY_ANTIALIASING, RenderingHints.VALUE_ANTIALIAS_ON)
 
     val centerX = width / 2
+    val carX = centerX - carWidth / 2
 
     // 绘制文本
     g2d.color = Color.black
     g2d.font = Font("Arial", Font.PLAIN, 20)
+    val text = statusLabel(status)
     val fontMetrics = g2d.fontMetrics
-    val textWidth = fontMetrics.stringWidth(status.name)
+    val textWidth = fontMetrics.stringWidth(text)
     val textHeight = fontMetrics.height
-    g2d.drawString(status.name, (width - textWidth) / 2, height - lh - h - textHeight / 2)
+    g2d.drawString(text, (width - textWidth) / 2, height - lh - h - textHeight / 2)
 
-    // 绘制电梯
-    // 绘制门
-    when (status) {
-      JinBoDoorStatus.OPENING -> {
-        g2d.color = Color.lightGray
-        g2d.fillRect(centerX - lw / 2, height - lh - h, lw, lh)
-
-        g2d.color = Color.LIGHT_GRAY
-        g2d.drawRect(centerX - lw, height - lh - h, lw / 2, lh)
-        g2d.drawRect(centerX + lw / 2, height - lh - h, lw / 2, lh)
-      }
-
-      JinBoDoorStatus.OPEN -> {
-        g2d.color = Color.GREEN
-        g2d.fillRect(centerX - lw / 2, height - lh - h, lw, lh)
-
-        g2d.color = Color.DARK_GRAY
-        g2d.drawRect(centerX - lw, height - lh - h, lw / 2, lh)
-        g2d.drawRect(centerX + lw / 2, height - lh - h, lw / 2, lh)
-      }
-
-      JinBoDoorStatus.CLOSING -> {
-        g2d.color = Color.YELLOW
-        g2d.fillRect(centerX - lw / 2, height - lh - h, lw, lh)
-
-        g2d.color = Color.LIGHT_GRAY
-        g2d.drawRect(centerX - lw, height - lh - h, lw / 2, lh)
-        g2d.drawRect(centerX + lw / 2, height - lh - h, lw / 2, lh)
-      }
-
-      JinBoDoorStatus.CLOSE -> {
-        g2d.color = Color.ORANGE
-        g2d.fillRect(centerX - lw / 2, height - lh - h, lw, lh)
-
-        g2d.color = Color.LIGHT_GRAY
-        g2d.drawRect(centerX - lw / 2, height - lh - h, lw / 2, lh)
-        g2d.drawRect(centerX, height - lh - h, lw / 2, lh)
-      }
-
-      JinBoDoorStatus.ERROR -> {
-        g2d.color = Color.DARK_GRAY
-        g2d.fillRect(centerX - lw / 2, height - lh - h, lw, lh)
-
-        g2d.color = Color.RED
-        g2d.drawRect(centerX - lw / 2, height - lh - h, lw / 2, lh)
-        g2d.drawRect(centerX, height - lh - h, lw / 2, lh)
-      }
+    // 门数大于 1 时按门号从左到右依次绘制，单门保持原有梯厢尺寸和样式。
+    val doorWidth = (carWidth - (doors.size + 1) * DOOR_GAP) / doors.size
+    doors.forEachIndexed { index, door ->
+      val x = carX + DOOR_GAP + index * (doorWidth + DOOR_GAP)
+      drawDoor(g2d, door, x, height - lh - h, doorWidth, lh)
     }
 
     // 绘制一条线：上边
@@ -180,21 +142,96 @@ class Cage(
     }
   }
 
+  /** 按原梯厢样式绘制单扇门，并用文字标出该门的状态。 */
+  private fun drawDoor(g2d: Graphics2D, door: JinBoDoor, x: Int, y: Int, width: Int, height: Int) {
+    val color = when (door.status) {
+      JinBoDoorStatus.OPENING -> Color.lightGray
+      JinBoDoorStatus.OPEN -> Color.GREEN
+      JinBoDoorStatus.CLOSING -> Color.YELLOW
+      JinBoDoorStatus.CLOSE -> Color.ORANGE
+      JinBoDoorStatus.ERROR -> Color.DARK_GRAY
+    }
+    g2d.color = color
+    g2d.fillRect(x, y, width, height)
+
+    g2d.color = when (door.status) {
+      JinBoDoorStatus.OPEN -> Color.DARK_GRAY
+      JinBoDoorStatus.ERROR -> Color.RED
+      else -> Color.LIGHT_GRAY
+    }
+    g2d.drawRect(x, y, width, height)
+
+    g2d.font = Font("Arial", Font.PLAIN, 10)
+    val statusText = doorLabel(g2d, door, width)
+    val fittedLabel = "${door.code} $statusText"
+    val labelWidth = g2d.fontMetrics.stringWidth(fittedLabel)
+    val labelHeight = g2d.fontMetrics.height
+    val labelX = x + (width - labelWidth) / 2
+    val labelY = y + (height + labelHeight) / 2 - 3
+    g2d.color = when {
+      door.status == JinBoDoorStatus.ERROR -> Color.WHITE
+      door.status == JinBoDoorStatus.CLOSE -> Color.BLACK
+      else -> Color.DARK_GRAY
+    }
+    g2d.drawString(fittedLabel, labelX, labelY)
+  }
+
+  /** 计算包含所有门的梯厢宽度，避免门数增加后每扇门被挤压。 */
+  fun preferredCarWidth(): Int = PREFERRED_DOOR_WIDTH * doors.size + DOOR_GAP * (doors.size + 1)
+
+  private fun statusLabel(status: JinBoDoorStatus): String = when (status) {
+    JinBoDoorStatus.OPEN -> "Opened"
+    JinBoDoorStatus.OPENING -> "Opening"
+    JinBoDoorStatus.CLOSE -> "Closed"
+    JinBoDoorStatus.CLOSING -> "Closing"
+    JinBoDoorStatus.ERROR -> "Fault"
+  }
+
+  private fun doorLabel(g2d: Graphics2D, door: JinBoDoor, maxWidth: Int): String {
+    val labels = when (door.status) {
+      JinBoDoorStatus.OPEN -> listOf("Opened", "Open", "O")
+      JinBoDoorStatus.OPENING -> listOf("Opening", "Open..", "O..")
+      JinBoDoorStatus.CLOSE -> listOf("Closed", "Shut", "C")
+      JinBoDoorStatus.CLOSING -> listOf("Closing", "Close..", "C..")
+      JinBoDoorStatus.ERROR -> listOf("Fault", "Error", "E")
+    }
+    return labels.first { g2d.fontMetrics.stringWidth("${door.code} $it") <= maxWidth }
+  }
+
   override fun onEvent(event: LiftEvent) {
     if (event.topic == "liftState") {
       try {
         val map: Map<String, Any> = JsonHelper.mapper.readValue(event.msg, jacksonTypeRef())
-        val elevatorHeight = map["h"] as Double
+        // JsonHelper 按字段类型反序列化，height 为 Double，同时兼容手工状态/回放数据中的整数高度。
+        val elevatorHeight = (map["h"] as Number).toDouble()
         // 调试输出
         // println("[Cage DEBUG] Received elevator height: $elevatorHeight meters, minHeight: $minHeight, maxHeight: $maxHeight")
         updateHeight(elevatorHeight)
         status = JinBoDoorStatus.valueOf(map["status"] as String)
+        val rawDoors = map["doors"] as? List<*>
+        doors = if (rawDoors.isNullOrEmpty()) {
+          listOf(JinBoDoor(code = 0, status = status))
+        } else {
+          parseDoors(rawDoors).takeIf { it.isNotEmpty() } ?: listOf(JinBoDoor(code = 0, status = status))
+        }
+        carWidth = maxOf(lw, preferredCarWidth())
         repaint()
       } catch (e: Exception) {
         println("[Cage ERROR] Failed to process liftState event: ${e.message}")
         e.printStackTrace()
       }
     }
+  }
+
+  private fun parseDoors(rawDoors: List<*>): List<JinBoDoor> = rawDoors.mapNotNull { rawDoor ->
+    val door = rawDoor as? Map<*, *> ?: return@mapNotNull null
+    val code = (door["code"] as? Number)?.toInt() ?: return@mapNotNull null
+    val doorStatus = (door["status"] as? String)?.let { runCatching { JinBoDoorStatus.valueOf(it) }.getOrNull() }
+      ?: return@mapNotNull null
+    JinBoDoor(
+      code = code,
+      status = doorStatus,
+    )
   }
 
   override fun setBounds(x: Int, y: Int, width: Int, height: Int) {
@@ -206,6 +243,11 @@ class Cage(
       // 但当前电梯高度未知，需要从事件或状态获取
       // 暂时不处理，等待下一次事件更新
     }
+  }
+
+  private companion object {
+    const val DOOR_GAP = 3
+    const val PREFERRED_DOOR_WIDTH = 64
   }
 }
 

@@ -161,16 +161,34 @@ class JinBoConfigPanel(val config: JinBoConfig) :
 
     // 这里可以添加保存到配置文件的逻辑
     // 例如: saveConfigToFile();
-    JinBoServer.updateConfig(
-      config.copy(
-        port = fieldInputs["启动端口"]!!.text.toInt(),
-        openCost = fieldInputs["开门耗时"]!!.text.toInt(),
-        closeCost = fieldInputs["关门耗时"]!!.text.toInt(),
-        closeDelay = fieldInputs["自动关门延迟时间"]!!.text.toInt(),
-        liftSpeed = fieldInputs["上升速度"]!!.text.toDouble(),
-        logTcp = logTcpInput?.isSelected ?: false,
-      ),
-    )
+    val doorCount = fieldInputs["电梯门数量"]!!.text.toIntOrNull()
+    if (doorCount == null || doorCount < 1) {
+      JOptionPane.showMessageDialog(this, "电梯门数量必须是大于等于 1 的整数", "配置错误", JOptionPane.ERROR_MESSAGE)
+      return
+    }
+
+    try {
+      JinBoServer.updateConfig(
+        config.copy(
+          port = fieldInputs["启动端口"]!!.text.toInt(),
+          openCost = fieldInputs["开门耗时"]!!.text.toInt(),
+          closeCost = fieldInputs["关门耗时"]!!.text.toInt(),
+          closeDelay = fieldInputs["自动关门延迟时间"]!!.text.toInt(),
+          liftSpeed = fieldInputs["上升速度"]!!.text.toDouble(),
+          logTcp = logTcpInput?.isSelected ?: false,
+          doorCount = doorCount,
+        ),
+      )
+    } catch (e: NumberFormatException) {
+      JOptionPane.showMessageDialog(this, "端口、耗时、延迟和速度必须是有效数字", "配置错误", JOptionPane.ERROR_MESSAGE)
+      return
+    } catch (e: IllegalArgumentException) {
+      JOptionPane.showMessageDialog(this, e.message ?: "电梯配置无效", "配置错误", JOptionPane.ERROR_MESSAGE)
+      return
+    }
+
+    // 配置数量变化后，让当前正在显示的梯厢立即按新门数布局。
+    JinBoFetcher.fetch(config.id)
 
     updateConfig()
 
@@ -190,6 +208,7 @@ class JinBoConfigPanel(val config: JinBoConfig) :
       fieldInputs["关门耗时"]?.text = config.closeCost.toString()
       fieldInputs["自动关门延迟时间"]?.text = config.closeDelay.toString()
       fieldInputs["上升速度"]?.text = config.liftSpeed.toString()
+      fieldInputs["电梯门数量"]?.text = config.doorCount.toString()
       // logTcpInput?.isSelected = config.logTcp
     }
   }
@@ -227,6 +246,7 @@ class JinBoConfigPanel(val config: JinBoConfig) :
       "关门耗时",
       "自动关门延迟时间",
       "上升速度",
+      "电梯门数量",
     )
   }
 
