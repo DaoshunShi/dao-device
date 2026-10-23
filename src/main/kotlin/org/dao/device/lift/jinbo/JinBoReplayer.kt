@@ -58,6 +58,9 @@ class JinBoReplayer(private val liftId: String) {
   private val firstTs get() = frames.firstOrNull()?.ts ?: 0
   private val lastTs get() = frames.lastOrNull()?.ts ?: 0
 
+  /** 当前虚拟时钟；未加载帧时为 0 */
+  val currentTs: Long get() = clockTs
+
   /** 虚拟时钟对应的帧下标：ts <= clockTs 的最后一帧（无则 0） */
   private fun indexAt(ts: Long): Int {
     val i = frames.indexOfLast { it.ts <= ts }

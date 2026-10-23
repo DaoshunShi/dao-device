@@ -172,6 +172,26 @@ class LiftFrame(val config: JinBoConfig) : JFrame("JinBo Lift Monitor"), GuiEven
         },
       )
       add(
+        JButton("-10s").apply {
+          addActionListener { jumpReplayBy(-10_000L) }
+        },
+      )
+      add(
+        JButton("-1s").apply {
+          addActionListener { jumpReplayBy(-1_000L) }
+        },
+      )
+      add(
+        JButton("+1s").apply {
+          addActionListener { jumpReplayBy(1_000L) }
+        },
+      )
+      add(
+        JButton("+10s").apply {
+          addActionListener { jumpReplayBy(10_000L) }
+        },
+      )
+      add(
         JButton("⏪ 快退").apply {
           addActionListener { replayer?.rewind() }
         },
@@ -256,6 +276,15 @@ class LiftFrame(val config: JinBoConfig) : JFrame("JinBo Lift Monitor"), GuiEven
     } else {
       r.play()
       playPauseBtn.text = "⏸ 暂停"
+    }
+  }
+
+  /** 相对当前虚拟时钟跳跃；重新计时，避免播放中下一 tick 仍按旧的毫秒偏移。 */
+  private fun jumpReplayBy(offsetMs: Long) {
+    val r = replayer ?: return
+    r.seek(r.currentTs + offsetMs)
+    if (r.isPlaying) {
+      r.play()
     }
   }
 
