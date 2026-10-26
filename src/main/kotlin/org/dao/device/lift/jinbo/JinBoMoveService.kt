@@ -43,8 +43,9 @@ object JinBoMoveService {
   fun arrive(lift: JinBoRuntime) {
     if (lift.curFloor != lift.targetFloor) return
 
+    val direction = if (lift.liftStatus == JinBoLiftStatus.Idle) lift.direction else lift.liftStatus
     val doorCodes = lift.reqs
-      .filter { it.destFloor == lift.curFloor && matchesTravelDirection(lift, it) }
+      .filter { it.destFloor == lift.curFloor && matchesTravelDirection(lift, it, direction) }
       .flatMap { it.doorCodes }
       .ifEmpty { listOf(0) }
     lift.liftStatus = JinBoLiftStatus.Idle
@@ -56,9 +57,10 @@ object JinBoMoveService {
   /** 当前楼层指定门已经打开时，才视为完成对应的呼梯请求。 */
   fun cleanOpenedFloorReq(lift: JinBoRuntime) {
     lift.reqs.removeIf { req ->
+      val direction = if (lift.liftStatus == JinBoLiftStatus.Idle) lift.direction else lift.liftStatus
       req.destFloor == lift.curFloor &&
         lift.targetFloor == null &&
-        matchesTravelDirection(lift, req) &&
+        matchesTravelDirection(lift, req, direction) &&
         req.doorCodes.ifEmpty { listOf(0) }.all { code ->
           lift.doors.firstOrNull { it.code == code }?.status == JinBoDoorStatus.OPEN
         }
@@ -68,7 +70,7 @@ object JinBoMoveService {
   private fun canLift(lift: JinBoRuntime): Boolean =
     lift.doors.all { it.status == JinBoDoorStatus.CLOSE }
 
-  private fun matchesTravelDirection(lift: JinBoRuntime, req: JinBoReq): Boolean =
-    JinBoDirection.arrivalMatches(lift.config, req, lift.direction)
+  private fun matchesTravelDirection(lift: JinBoRuntime, req: JinBoReq, direction: JinBoLiftStatus): Boolean =
+    JinBoDirection.arrivalMatches(lift.config, req, direction)
 
 }
