@@ -36,7 +36,7 @@ class LabelCircle2(config: JinBoConfig, val floorIdx: Int, val labelStr: String,
         println("Clicked on LabelCircle")
         active = !active
 
-        JinBoBtnService.press(config.id, JinBoReq(floorIdx))
+        JinBoBtnService.press(config.id, JinBoReq(floorIdx), fromPanel = true)
 
         repaint()
       }

@@ -45,7 +45,11 @@ class TriangleCircle(
         println("Clicked on TriangleCircle")
         active = !active
 
-        JinBoBtnService.pressOutDoor(config.id, floorIdx, if (up) JinBoLiftStatus.Up else JinBoLiftStatus.Down)
+        JinBoBtnService.pressOutDoor(
+          config.id,
+          floorIdx,
+          if (up) JinBoLiftStatus.Up else JinBoLiftStatus.Down,
+        )
 
         repaint()
       }
