@@ -126,7 +126,9 @@ class LiftFrame(val config: JinBoConfig) : JFrame("JinBo Lift Monitor"), GuiEven
     try {
       val map: Map<String, Any> = JsonHelper.mapper.readValue(event.msg, jacksonTypeRef())
       updateEmergencyBanner(map["emergencyStopped"] as? Boolean == true)
-      (map["liftStatus"] as? String)?.let { eventLogPanel.updateLiftStatus(JinBoLiftStatus.valueOf(it)) }
+      val liftStatus = (map["liftStatus"] as? String)?.let { JinBoLiftStatus.valueOf(it) }
+      val direction = (map["direction"] as? String)?.let { JinBoLiftStatus.valueOf(it) }
+      if (liftStatus != null) eventLogPanel.updateLiftStatus(liftStatus, direction ?: liftStatus)
     } catch (_: Exception) {
     }
   }

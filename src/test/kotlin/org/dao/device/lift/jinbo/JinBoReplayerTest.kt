@@ -319,6 +319,16 @@ class JinBoReplayerTest {
     }
   }
 
+  @Test
+  fun `old replay frame without direction falls back to lift status`() {
+    val frame = JsonHelper.mapper.readValue(
+      """{"liftId":"$LIFT_ID","ts":1000,"curFloor":2,"h":3.0,"liftStatus":"Down","doorStatus":"OPEN","emergencyStopped":false,"reqs":[],"logs":[]}""",
+      JinBoFrame::class.java,
+    )
+
+    assertEquals(JinBoLiftStatus.Down, frame.direction)
+  }
+
   private fun withReplayFile(
     fileName: String,
     timestamps: List<Long> = emptyList(),

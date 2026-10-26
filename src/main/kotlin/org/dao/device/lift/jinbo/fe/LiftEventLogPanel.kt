@@ -36,7 +36,8 @@ class LiftEventLogPanel(
   }
   private val eventCounter = mutableMapOf<String, Int>()
   private val statusLabel = JLabel("状态: 等待事件...")
-  private val liftStatusLabel = JLabel("电梯状态: --")
+  private val directionLabel = JLabel("方向: --")
+  private val liftStatusLabel = JLabel("状态: --")
   private val bottom = JPanel().apply { layout = BoxLayout(this, BoxLayout.Y_AXIS) }
   private val replayToggle = JToggleButton("回放")
   private var syncingReplayToggle = false
@@ -74,6 +75,8 @@ class LiftEventLogPanel(
         add(Box.createHorizontalStrut(10))
         add(statusLabel)
         add(Box.createHorizontalGlue()) // 添加弹性空间
+        add(directionLabel)
+        add(Box.createHorizontalStrut(10))
         add(liftStatusLabel)
         add(Box.createHorizontalStrut(10))
         add(replayToggle)
@@ -123,14 +126,16 @@ class LiftEventLogPanel(
     updateStatus()
   }
 
-  /** 实时运行和回放共用该入口，按 liftState 事件更新电梯方向状态。 */
-  fun updateLiftStatus(status: JinBoLiftStatus) {
-    liftStatusLabel.text = "电梯状态: ${status.name}"
+  /** 实时运行和回放共用该入口，更新底栏显示的运行状态与方向。 */
+  fun updateLiftStatus(status: JinBoLiftStatus, direction: JinBoLiftStatus) {
+    liftStatusLabel.text = "状态: ${status.name}"
+    directionLabel.text = "方向: ${direction.name}"
   }
 
   fun clearLog() {
     logArea.text = ""
-    liftStatusLabel.text = "电梯状态: --"
+    liftStatusLabel.text = "状态: --"
+    directionLabel.text = "方向: --"
   }
 
   /**
@@ -143,7 +148,7 @@ class LiftEventLogPanel(
   fun renderReplayLogs(frames: List<JinBoFrame>, index: Int) {
     val doc = logArea.styledDocument
     doc.remove(0, doc.length)
-    frames.getOrNull(index)?.let { updateLiftStatus(it.liftStatus) }
+    frames.getOrNull(index)?.let { updateLiftStatus(it.liftStatus, it.direction) }
 
     val played = SimpleAttributeSet().apply { StyleConstants.setForeground(this, colorPlayed) }
     val current = SimpleAttributeSet().apply {

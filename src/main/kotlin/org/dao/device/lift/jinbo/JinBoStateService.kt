@@ -16,6 +16,7 @@ object JinBoStateService {
       liftId = lift.config.id,
       h = snapshot.h,
       liftStatus = snapshot.liftStatus,
+      direction = snapshot.direction,
       doors = snapshot.doors,
       emergencyStopped = snapshot.emergencyStopped,
     )
@@ -27,6 +28,7 @@ object JinBoStateService {
       liftId = liftId,
       h = frame.h,
       liftStatus = frame.liftStatus,
+      direction = frame.direction,
       doors = frame.doors.ifEmpty { listOf(JinBoDoor(code = 0, status = frame.doorStatus)) },
       emergencyStopped = frame.emergencyStopped,
       realtime = false,
@@ -38,6 +40,7 @@ object JinBoStateService {
       liftId = liftId,
       h = frame.h,
       liftStatus = frame.liftStatus,
+      direction = frame.direction,
       doors = frame.doors.ifEmpty { listOf(JinBoDoor(code = 0, status = frame.doorStatus)) },
       emergencyStopped = frame.emergencyStopped,
     )
@@ -47,6 +50,7 @@ object JinBoStateService {
     liftId: String,
     h: Double,
     liftStatus: JinBoLiftStatus,
+    direction: JinBoLiftStatus,
     doors: List<JinBoDoor>,
     emergencyStopped: Boolean,
     realtime: Boolean = true,
@@ -57,6 +61,7 @@ object JinBoStateService {
         mapOf(
           "h" to h,
           "liftStatus" to liftStatus.name,
+          "direction" to direction.name,
           "doorStatus" to aggregateDoorStatus(doors),
           "doors" to doors,
           "emergencyStopped" to emergencyStopped,
@@ -72,6 +77,7 @@ object JinBoStateService {
   private data class LiftState(
     val h: Double,
     val liftStatus: JinBoLiftStatus,
+    val direction: JinBoLiftStatus,
     val doors: List<JinBoDoor>,
     val emergencyStopped: Boolean,
   ) {
@@ -79,6 +85,7 @@ object JinBoStateService {
       fun capture(lift: JinBoRuntime): LiftState = LiftState(
         h = lift.h,
         liftStatus = lift.liftStatus,
+        direction = lift.direction,
         doors = lift.doors.map { it.copy() },
         emergencyStopped = lift.emc,
       )

@@ -193,7 +193,7 @@ data class JinBoDoorConfig(
  * 回放帧：某一仿真 tick 的电梯可视状态快照 + 该帧窗口内的事件日志。
  *
  * reqs 可还原 outside/inside/tcp 三个事件（按 source 过滤）；
- * h/doorStatus/doors/emergencyStopped 可还原 liftState 事件。
+ * h/liftStatus/direction/doorStatus/doors/emergencyStopped 可还原 liftState 事件。
  */
 data class JinBoFrame(
   val liftId: String,
@@ -201,6 +201,7 @@ data class JinBoFrame(
   val curFloor: Int,
   val h: Double,
   val liftStatus: JinBoLiftStatus,
+  val direction: JinBoLiftStatus = liftStatus, // 旧回放帧没有方向时沿用运行状态
   val doorStatus: JinBoDoorStatus,
   val emergencyStopped: Boolean,
   val reqs: List<JinBoReq>, // 请求快照
@@ -213,6 +214,7 @@ data class Snapshot(
   val curFloor: Int,
   val h: Double,
   val liftStatus: JinBoLiftStatus,
+  val direction: JinBoLiftStatus,
   val emergencyStopped: Boolean,
   val reqs: List<JinBoReq>,
   val doors: List<JinBoDoor>,

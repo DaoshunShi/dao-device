@@ -6,8 +6,6 @@ import java.io.File
 object JinBoRepo {
   private const val DEFAULT_LIFT_SPEED = 2.0
   private const val CONFIG_DIR = "config"
-  private const val DEFAULT_CONFIG_FILE = "default.json"
-  private const val ELEVATOR_A_CONFIG_FILE = "elevator_A.json"
 
   fun load(): MutableMap<String, JinBoRuntime> {
     val configDir = File(CONFIG_DIR)
@@ -56,18 +54,12 @@ object JinBoRepo {
     return listOf(JinBoRuntime(createDefaultConfig()))
   }
 
-  fun persist() {
-  }
-
   /**
    * 测试方法：验证配置加载功能
    */
   @JvmStatic
   fun main(args: Array<String>) {
     println("Testing configuration loading...")
-
-    // 注意：不调用generateDefaultConfigs()以避免覆盖现有配置
-    // generateDefaultConfigs()
 
     // 然后加载配置
     val lifts = load()
@@ -87,51 +79,6 @@ object JinBoRepo {
     }
 
     println("\nConfiguration loading test completed.")
-  }
-
-  /**
-   * 生成默认配置文件到config目录
-   * 用于初始设置或重置配置
-   */
-  fun generateDefaultConfigs() {
-    val configDir = File(CONFIG_DIR)
-    if (!configDir.exists()) {
-      configDir.mkdirs()
-      println("Created config directory: ${configDir.absolutePath}")
-    }
-
-    // 生成电梯A配置（6层，包含一个禁用的楼层）
-    val elevatorAConfig = JinBoConfig(
-      "A",
-      8080,
-      listOf(
-        JinBoFloor(1, "G", 0.0),
-        JinBoFloor(2, "L1", 3.0),
-        JinBoFloor(3, "L2", 6.0),
-        JinBoFloor(4, "L3", 9.0),
-        JinBoFloor(5, "L4", 12.0),
-        JinBoFloor(6, "L5", 15.0, disabled = true),
-      ),
-      DEFAULT_LIFT_SPEED,
-      1 * 1000,
-      1 * 1000,
-      3 * 1000,
-    )
-
-    try {
-      val defaultFile = File(configDir, DEFAULT_CONFIG_FILE)
-      JsonHelper.mapper.writerWithDefaultPrettyPrinter().writeValue(defaultFile, createDefaultConfig())
-      println("Generated default configuration: ${defaultFile.absolutePath}")
-
-      val elevatorAFile = File(configDir, ELEVATOR_A_CONFIG_FILE)
-      JsonHelper.mapper.writerWithDefaultPrettyPrinter().writeValue(elevatorAFile, elevatorAConfig)
-      println("Generated elevator A configuration: ${elevatorAFile.absolutePath}")
-
-      println("Default configuration files have been generated. Please modify them as needed.")
-    } catch (e: Exception) {
-      println("Failed to generate configuration files: ${e.message}")
-      e.printStackTrace()
-    }
   }
 
   private fun createDefaultConfig() = JinBoConfig(
