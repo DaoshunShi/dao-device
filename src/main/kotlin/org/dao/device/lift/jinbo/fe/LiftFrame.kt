@@ -73,15 +73,9 @@ class LiftFrame(val config: JinBoConfig) : JFrame("JinBo Lift Monitor"), GuiEven
       BorderLayout.CENTER,
     )
 
-    eventLogPanel = LiftEventLogPanel(
-      configId = config.id,
-      replayPanel = LiftReplayPanel(
-        config = config,
-        parentWindow = { this },
-        logPanel = eventLogPanel,
-      ),
-      onShowLiftStatusChanged = { showLiftStatus = it },
-    )
+    eventLogPanel = LiftEventLogPanel(configId = config.id, onShowLiftStatusChanged = { showLiftStatus = it })
+    replayPanel = LiftReplayPanel(config = config, parentWindow = { this }, logPanel = eventLogPanel)
+    eventLogPanel.attachReplayPanel(replayPanel)
     add(eventLogPanel, BorderLayout.SOUTH)
   }
 

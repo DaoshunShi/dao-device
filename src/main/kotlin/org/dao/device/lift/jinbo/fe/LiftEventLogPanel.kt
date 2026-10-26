@@ -27,7 +27,6 @@ import java.util.Date
  */
 class LiftEventLogPanel(
   private val configId: String,
-  private val replayPanel: LiftReplayPanel,
   private val onShowLiftStatusChanged: (Boolean) -> Unit,
 ) : JPanel(BorderLayout()) {
 
@@ -36,6 +35,8 @@ class LiftEventLogPanel(
   }
   private val eventCounter = mutableMapOf<String, Int>()
   private val statusLabel = JLabel("状态: 等待事件...")
+  private val bottom = JPanel().apply { layout = BoxLayout(this, BoxLayout.Y_AXIS) }
+  private val replayToggle = JToggleButton("回放")
 
   // 回放日志三色
   private val colorPlayed = Color(140, 140, 140) // 已播放：灰
@@ -51,48 +52,43 @@ class LiftEventLogPanel(
       BorderLayout.CENTER,
     )
 
-    // 底部：操作行 + 回放控制行（垂直堆叠）
-    val bottom = JPanel().apply {
-      layout = BoxLayout(this, BoxLayout.Y_AXIS)
-
-      // 操作行：清除日志 | 状态 | 回放开关 | 打印电梯状态
-      add(
-        JPanel().apply {
-          layout = BoxLayout(this, BoxLayout.X_AXIS)
-          alignmentX = LEFT_ALIGNMENT
-          maximumSize = Dimension(Int.MAX_VALUE, preferredSize.height.coerceAtLeast(32))
-          add(
-            JButton("清除日志").apply {
-              addActionListener {
-                logArea.text = ""
-                JinBoEventBus.fire(configId, LiftEvent("清除日志", "清除日志按钮被点击"))
-                eventCounter.clear()
-                updateStatus()
-              }
-            },
-          )
-          add(Box.createHorizontalStrut(10))
-          add(statusLabel)
-          add(Box.createHorizontalGlue()) // 添加弹性空间
-          add(
-            JToggleButton("回放").apply {
-              addActionListener { replayPanel.setReplayEnabled(isSelected) }
-            },
-          )
-          add(Box.createHorizontalStrut(10))
-          add(
-            JCheckBox("打印电梯状态").apply {
-              addActionListener { onShowLiftStatusChanged(isSelected) }
-            },
-          )
-        },
-      )
-
-      // 回放控制行（默认隐藏，开启回放后展开）
-      add(replayPanel)
-    }
+    // 底部：操作行 + 稍后挂载的回放控制行（垂直堆叠）
+    bottom.add(
+      JPanel().apply {
+        layout = BoxLayout(this, BoxLayout.X_AXIS)
+        alignmentX = LEFT_ALIGNMENT
+        maximumSize = Dimension(Int.MAX_VALUE, preferredSize.height.coerceAtLeast(32))
+        add(
+          JButton("清除日志").apply {
+            addActionListener {
+              logArea.text = ""
+              JinBoEventBus.fire(configId, LiftEvent("清除日志", "清除日志按钮被点击"))
+              eventCounter.clear()
+              updateStatus()
+            }
+          },
+        )
+        add(Box.createHorizontalStrut(10))
+        add(statusLabel)
+        add(Box.createHorizontalGlue()) // 添加弹性空间
+        add(replayToggle)
+        add(Box.createHorizontalStrut(10))
+        add(
+          JCheckBox("打印电梯状态").apply {
+            addActionListener { onShowLiftStatusChanged(isSelected) }
+          },
+        )
+      },
+    )
     add(bottom, BorderLayout.SOUTH)
     border = BorderFactory.createTitledBorder("事件日志")
+  }
+
+  /** 挂载回放控制行并绑定回放开关；面板构造完成后由窗口调用一次。 */
+  fun attachReplayPanel(replayPanel: LiftReplayPanel) {
+    replayToggle.addActionListener { replayPanel.setReplayEnabled(replayToggle.isSelected) }
+    bottom.add(replayPanel)
+    revalidate()
   }
 
   /** 追加一条实时日志并更新各 topic 的事件计数。 */
