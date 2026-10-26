@@ -3,10 +3,9 @@ package org.dao.device.lift.jinbo.fe
 import com.fasterxml.jackson.module.kotlin.jacksonTypeRef
 import org.dao.device.common.GuiEventListener
 import org.dao.device.common.JsonHelper
+import org.dao.device.lift.jinbo.JinBoBtnService
 import org.dao.device.lift.jinbo.JinBoConfig
 import org.dao.device.lift.jinbo.JinBoReq
-import org.dao.device.lift.jinbo.JinBoReqSource
-import org.dao.device.lift.jinbo.JinBoServer
 import org.dao.device.lift.jinbo.event.LiftEvent
 import java.awt.BasicStroke
 import java.awt.Color
@@ -37,9 +36,7 @@ class LabelCircle2(config: JinBoConfig, val floorIdx: Int, val labelStr: String,
         println("Clicked on LabelCircle")
         active = !active
 
-        // TCP 栏按钮：记 tcp-btn-goto，与真实 TCP socket 请求(tcp-goto)区分
-        JinBoServer.request(config.id, JinBoReq(floorIdx, JinBoReqSource.Tcp), log = false)
-        JinBoServer.logEvent(config.id, LiftEvent("tcp-btn-goto", "destFloor=$floorIdx"))
+        JinBoBtnService.press(config.id, JinBoReq(floorIdx))
 
         repaint()
       }

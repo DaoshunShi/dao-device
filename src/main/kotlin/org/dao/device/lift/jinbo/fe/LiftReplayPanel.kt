@@ -3,7 +3,8 @@ package org.dao.device.lift.jinbo.fe
 import org.apache.commons.lang3.time.DateFormatUtils
 import org.dao.device.lift.jinbo.JinBoConfig
 import org.dao.device.lift.jinbo.JinBoFrame
-import org.dao.device.lift.jinbo.JinBoReplayer
+import org.dao.device.lift.jinbo.JinBoLogService
+import org.dao.device.lift.jinbo.JinBoReplayService
 import java.awt.BorderLayout
 import java.awt.Dimension
 import java.awt.FlowLayout
@@ -27,14 +28,13 @@ class LiftReplayPanel(
   private val logPanel: LiftEventLogPanel,
 ) : JPanel(BorderLayout()) {
 
-  private var replayer: JinBoReplayer? = null
-  private var replaying = false
+  private val replayService = JinBoReplayService(config.id)
 
-  val isReplaying: Boolean get() = replaying
+  val isReplaying: Boolean get() = replayService.isReplaying
 
   private val playPauseBtn = JButton("▶ 播放")
   private val replayTimeLabel = JLabel("--:--:--")
-  private val replayTimeline = ReplayTimeline { ts -> replayer?.seek(ts) }
+  private val replayTimeline = ReplayTimeline { ts -> replayService.seek(ts) }
   private val replayFileCombo = JComboBox<String>()
   private var suppressComboEvent = false
 
@@ -49,15 +49,12 @@ class LiftReplayPanel(
   /** 打开/关闭回放模式：打开时加载并停在首帧，关闭时释放回放器并清空日志。 */
   fun setReplayEnabled(on: Boolean) {
     if (on) {
-      val files = JinBoReplayer.listReplayFiles()
+      val files = replayService.listFiles()
       if (files.isEmpty()) {
         JOptionPane.showMessageDialog(parentWindow(), "没有可回放的记录（logs 下无 replay 日志）")
         return
       }
-      replayer = JinBoReplayer(config.id).apply {
-        onFrameChanged = { frames, index, clockTs -> onReplayFrame(frames, index, clockTs) }
-      }
-      replaying = true
+      replayService.onFrameChanged = { frames, index, clockTs -> onReplayFrame(frames, index, clockTs) }
       isVisible = true
 
       // 填充文件下拉（用 suppress 标志避免触发 switch）
@@ -70,11 +67,9 @@ class LiftReplayPanel(
       loadReplayFile(defaultFile)
       revalidate()
     } else {
-      replayer?.dispose()
-      replayer = null
-      replaying = false
+      replayService.close()
       isVisible = false
-      logPanel.clearLog()
+      JinBoLogService.clearDisplay(config.id)
       revalidate()
     }
   }
@@ -88,7 +83,7 @@ class LiftReplayPanel(
       add(
         replayFileCombo.apply {
           addActionListener {
-            if (replaying && !suppressComboEvent) {
+            if (isReplaying && !suppressComboEvent) {
               (selectedItem as? String)?.let { switchReplayFile(it) }
             }
           }
@@ -121,12 +116,12 @@ class LiftReplayPanel(
       )
       add(
         JButton("⏪ 快退").apply {
-          addActionListener { replayer?.rewind() }
+          addActionListener { replayService.rewind() }
         },
       )
       add(
         JButton("⏩ 快进").apply {
-          addActionListener { replayer?.fastForward() }
+          addActionListener { replayService.fastForward() }
         },
       )
       add(JLabel("当前时间:"))
@@ -139,18 +134,17 @@ class LiftReplayPanel(
 
   /** 加载指定回放文件到当前 replayer，刷新时间轴并停在首帧 */
   private fun loadReplayFile(fileName: String) {
-    val r = replayer ?: return
-    r.pause()
+    if (!isReplaying) return
     playPauseBtn.text = "▶ 播放"
-    val n = r.load(fileName)
-    logPanel.clearLog()
+    val n = replayService.loadFile(fileName)
+    JinBoLogService.clearDisplay(config.id)
     if (n == 0) {
       replayTimeline.setFrames(emptyList())
       JOptionPane.showMessageDialog(parentWindow(), "该文件中没有电梯 ${config.id} 的回放帧")
       return
     }
-    replayTimeline.setFrames(r.allFrames)
-    r.seekIndex(0)
+    replayTimeline.setFrames(replayService.allFrames)
+    replayService.seekFirstFrame()
   }
 
   /** 切换回放文件（下拉框选择时） */
@@ -159,34 +153,28 @@ class LiftReplayPanel(
   }
 
   private fun togglePlayPause() {
-    val r = replayer ?: return
-    if (r.isPlaying) {
-      r.pause()
-      playPauseBtn.text = "▶ 播放"
-    } else {
-      r.play()
+    if (!isReplaying) return
+    if (replayService.playOrPause()) {
       playPauseBtn.text = "⏸ 暂停"
+    } else {
+      playPauseBtn.text = "▶ 播放"
     }
   }
 
   /** 相对当前虚拟时钟跳跃；重新计时，避免播放中下一 tick 仍按旧的毫秒偏移。 */
   private fun jumpReplayBy(offsetMs: Long) {
-    val r = replayer ?: return
-    r.seek(r.currentTs + offsetMs)
-    if (r.isPlaying) {
-      r.play()
-    }
+    replayService.jumpBy(offsetMs)
   }
 
   /**
-   * 回放帧变化回调：更新时间标签、时间轴游标（用虚拟时钟逐秒）、日志三色分色（按帧 index）。
+   * 回放帧变化回调：更新时间标签、时间轴游标（使用虚拟时钟）、日志三色分色（按帧 index）。
    */
   private fun onReplayFrame(frames: List<JinBoFrame>, index: Int, clockTs: Long) {
     replayTimeLabel.text = DateFormatUtils.format(Date(clockTs), "HH:mm:ss")
     replayTimeline.setCurrent(clockTs)
     logPanel.renderReplayLogs(frames, index)
     // 播放到末尾时，按钮回到“播放”
-    if (replayer?.isPlaying != true) {
+    if (!replayService.isPlaying) {
       playPauseBtn.text = "▶ 播放"
     }
   }

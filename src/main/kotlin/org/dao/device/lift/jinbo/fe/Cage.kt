@@ -144,14 +144,7 @@ class Cage(
 
   /** 按原梯厢样式绘制单扇门，并用文字标出该门的状态。 */
   private fun drawDoor(g2d: Graphics2D, door: JinBoDoor, x: Int, y: Int, width: Int, height: Int) {
-    val color = when (door.status) {
-      JinBoDoorStatus.OPENING -> Color.lightGray
-      JinBoDoorStatus.OPEN -> Color.GREEN
-      JinBoDoorStatus.CLOSING -> Color.YELLOW
-      JinBoDoorStatus.CLOSE -> Color.ORANGE
-      JinBoDoorStatus.ERROR -> Color.DARK_GRAY
-    }
-    g2d.color = color
+    g2d.color = door.status.displayColor
     g2d.fillRect(x, y, width, height)
 
     g2d.color = when (door.status) {

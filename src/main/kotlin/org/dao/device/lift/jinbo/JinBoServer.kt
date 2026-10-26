@@ -1,6 +1,5 @@
 package org.dao.device.lift.jinbo
 
-import org.dao.device.common.JsonHelper
 import org.dao.device.lift.jinbo.event.LiftEvent
 import org.slf4j.LoggerFactory
 import java.awt.GraphicsEnvironment
@@ -35,6 +34,7 @@ import java.util.concurrent.Future
 object JinBoServer {
   private val logger = LoggerFactory.getLogger(javaClass)
   private const val EMERGENCY_STOP_MSG = "电梯处于急停状态"
+  private const val SIMULATION_INTERVAL_MS = 50L // 每秒 20 帧
 
   private val executor: ExecutorService = Executors.newSingleThreadExecutor()
   private var worker: Future<*>? = null
@@ -46,13 +46,13 @@ object JinBoServer {
 
     // 加载 lifts
     lifts.putAll(JinBoRepo.load())
-    lifts.values.map { it.init() }
+    lifts.values.forEach { it.init() }
 
     worker = executor.submit { process() }
   }
 
   fun dispose() {
-    lifts.values.map { it.dispose() }
+    lifts.values.forEach { it.dispose() }
     worker?.cancel(true)
   }
 
@@ -81,7 +81,7 @@ object JinBoServer {
           logger.error("processLift failed for ${lift.config.id}: ${e.message}", e)
         }
       }
-      Thread.sleep(100)
+      Thread.sleep(SIMULATION_INTERVAL_MS)
     }
   }
 
@@ -91,18 +91,18 @@ object JinBoServer {
   fun processLift(lr: JinBoRuntime) {
     synchronized(lr) {
       // 按高度和已启用楼层定位当前层，避免外部刚更新 curFloor/h 时仍用旧楼层做到站判定。
-      JinBoMovement.syncCurrentFloor(lr)
+      JinBoMoveService.syncCurrentFloor(lr)
       if (lr.emergencyStopped) {
         // 急停期间也录制一帧，保证时间轴连续
-        JinBoRecorder.capture(lr)
+        JinBoLogService.captureFrame(lr)
         return
       }
 
       // 先完成已到期的开门/关门操作，再判断是否开始移动
-      JinBoDoorController.update(lr)
+      JinBoDoorService.update(lr)
       // 只有已经停在当前楼层且目标门打开，才说明本次呼梯完成。
       // 刚到站时门仍为 OPENING，路过或正在离开时也不能清理请求。
-      if (!lr.lifting) cleanOpenedFloorReq(lr)
+      if (!lr.lifting) JinBoMoveService.cleanOpenedFloorReq(lr)
 
       // 门流程结束前不选择下一站，保证到站后完整等待自动关门延迟。
       if (lr.targetFloor == null && !lr.holdAtCurrentFloor()) JinBoRequestSelector.selectBetterReq(lr)
@@ -113,29 +113,17 @@ object JinBoServer {
 
       // 跨层移动必须先关闭全部门；门关闭后本 tick 才开始移动
       if (lr.targetFloor != null && lr.targetFloor != lr.curFloor) {
-        JinBoDoorController.close(lr)
-        if (lr.canLifting()) {
+        JinBoDoorService.close(lr)
+        if (lr.doors.all { it.status == JinBoDoorStatus.CLOSE }) {
           lr.lifting = true
-          JinBoMovement.advance(lr)
+          JinBoMoveService.advance(lr)
         }
       }
 
-      afterArrive(lr)
+      JinBoMoveService.arrive(lr)
 
       // 录制本 tick 的状态快照
-      JinBoRecorder.capture(lr)
-    }
-  }
-
-  /** 当前楼层指定门已经打开时，才视为完成对应的呼梯请求；梯外呼梯还要匹配运行方向。 */
-  private fun cleanOpenedFloorReq(lr: JinBoRuntime) {
-    lr.reqs.removeIf { req ->
-      req.destFloor == lr.curFloor &&
-        lr.targetFloor == null &&
-        matchesTravelDirection(lr, req) &&
-        req.doorCodes.ifEmpty { listOf(0) }.all { code ->
-          lr.doors.firstOrNull { it.code == code }?.status == JinBoDoorStatus.OPEN
-        }
+      JinBoLogService.captureFrame(lr)
     }
   }
 
@@ -144,26 +132,9 @@ object JinBoServer {
     JinBoDirection.arrivalMatches(lr.config, req, lr.travelDirection)
 
   /**
-   * 电梯到达目标楼层后的处理
-   */
-  private fun afterArrive(lr: JinBoRuntime) {
-    if (lr.curFloor == lr.targetFloor) {
-      val doorCodes = lr.reqs
-        .filter { it.destFloor == lr.curFloor && matchesTravelDirection(lr, it) }
-        .flatMap { it.doorCodes }
-        .ifEmpty { listOf(0) }
-      lr.lifting = false
-      lr.targetFloor = null
-      lr.lastMoveOn = null
-      val now = Date()
-      JinBoDoorController.open(lr, doorCodes, now)
-    }
-  }
-
-  /**
    * 请求电梯到指定楼层
    */
-  fun request(liftId: String, req: JinBoReq, log: Boolean = true): JinBoResp {
+  fun request(liftId: String, req: JinBoReq): JinBoResp {
     val lift = mustGetLift(liftId)
     synchronized(lift) {
       if (lift.emergencyStopped) {
@@ -171,32 +142,22 @@ object JinBoServer {
       }
       val invalidCode = req.doorCodes.firstOrNull { code -> lift.doors.none { it.code == code } }
       if (invalidCode != null) {
-        return JinBoResp("400", "${liftId} 电梯不存在门号 $invalidCode")
+        return JinBoResp("400", "$liftId 电梯不存在门号 $invalidCode")
       }
-      val resolvedReq = JinBoDoorController.resolveDoorCodes(req)
+      val resolvedReq = JinBoDoorService.resolveDoorCodes(req)
       if (req.destFloor == lift.curFloor) {
         // 同层呼梯也先进入请求队列；只有目标门真正打开后才算完成并清理。
         if (lift.reqs.none { it == resolvedReq }) {
           lift.reqs.add(resolvedReq)
         }
         if (matchesTravelDirection(lift, resolvedReq)) {
-          JinBoDoorController.refreshSameFloorTimer(lift, resolvedReq.doorCodes)
+          JinBoDoorService.refreshSameFloorTimer(lift, resolvedReq.doorCodes)
         }
         return JinBoResp()
       }
       if (lift.reqs.none { it == resolvedReq }) {
         lift.reqs.add(resolvedReq)
       }
-    }
-    // 按来源统一打呼梯日志：梯外 out-goto / 梯内 in-goto / TCP tcp-goto
-    // 开门按钮虽走 InDoor 请求，但需打 in-open，故由调用方传 log=false 自行打印
-    if (log) {
-      val prefix = when (req.source) {
-        JinBoReqSource.OutDoor -> "out-goto"
-        JinBoReqSource.InDoor -> "in-goto"
-        JinBoReqSource.Tcp -> "tcp-goto"
-      }
-      logEvent(liftId, LiftEvent(prefix, JsonHelper.writeValueAsString(req)))
     }
     return JinBoResp()
   }
@@ -211,11 +172,8 @@ object JinBoServer {
       if (lift.isMoving()) {
         return JinBoResp("400", "电梯正在运行中，不能开门")
       }
-      val error = JinBoDoorController.open(lift, doorCodes)
-      if (error != null) {
-        return JinBoResp("400", error)
-      }
-      logEvent(liftId, LiftEvent("open", JsonHelper.writeValueAsString(mapOf("doorCodes" to doorCodes))))
+      val error = JinBoDoorService.open(lift, doorCodes)
+      if (error != null) return JinBoResp("400", error)
       return JinBoResp()
     }
   }
@@ -229,9 +187,8 @@ object JinBoServer {
       if (lr.emergencyStopped) {
         return JinBoResp("409", EMERGENCY_STOP_MSG)
       }
-      JinBoDoorController.close(lr)
+      JinBoDoorService.close(lr)
       lr.targetFloor = null
-      logEvent(liftId, LiftEvent("close", "关闭全部门"))
       return JinBoResp()
     }
   }
@@ -244,7 +201,7 @@ object JinBoServer {
       }
       lr.emergencyStopped = true
       lr.emergencyStartedAt = Date()
-      logEvent(liftId, LiftEvent("急停", "$liftId 已进入急停状态"))
+      JinBoLogService.logEvent(liftId, LiftEvent("急停", "$liftId 已进入急停状态"))
     }
     return JinBoResp()
   }
@@ -260,16 +217,13 @@ object JinBoServer {
       val now = Date()
       if (pausedAt != null) {
         val pausedDuration = now.time - pausedAt.time
-        lr.doors.forEach { door ->
-          door.openOn = door.openOn?.let { Date(it.time + pausedDuration) }
-          door.opStartOn = door.opStartOn?.let { Date(it.time + pausedDuration) }
-        }
+        JinBoDoorService.shiftOperationTimers(lr, pausedDuration)
       }
 
       lr.emergencyStopped = false
       lr.emergencyStartedAt = null
       lr.lastMoveOn = null
-      logEvent(liftId, LiftEvent("解除急停", "$liftId 已解除急停状态"))
+      JinBoLogService.logEvent(liftId, LiftEvent("解除急停", "$liftId 已解除急停状态"))
     }
     return JinBoResp()
   }
@@ -299,13 +253,4 @@ object JinBoServer {
 
   private fun mustGetLift(liftId: String): JinBoRuntime = lifts[liftId] ?: throw RuntimeException("$liftId 电梯不存在")
 
-  /**
-   * 在页面上打印日志
-   */
-  fun logEvent(liftId: String, e: LiftEvent) {
-    JinBoRecorder.bufferLog(liftId, "${e.topic}:${e.msg}")
-    // 无头运行（测试、服务端模式）不创建 Swing 窗口，日志仍由录制器保存。
-    if (GraphicsEnvironment.isHeadless()) return
-    lifts[liftId]?.frame?.logEvent(e)
-  }
 }

@@ -3,8 +3,9 @@ package org.dao.device.lift.jinbo.fe
 import com.fasterxml.jackson.module.kotlin.jacksonTypeRef
 import org.dao.device.common.GuiEventListener
 import org.dao.device.common.JsonHelper
+import org.dao.device.lift.jinbo.JinBoFrame
 import org.dao.device.lift.jinbo.JinBoConfig
-import org.dao.device.lift.jinbo.JinBoRecorder
+import org.dao.device.lift.jinbo.JinBoLogService
 import org.dao.device.lift.jinbo.JinBoServer
 import org.dao.device.lift.jinbo.event.LiftEvent
 import java.awt.BorderLayout
@@ -19,6 +20,10 @@ import javax.swing.JPanel
 import javax.swing.Timer
 
 class LiftFrame(val config: JinBoConfig) : JFrame("JinBo Lift Monitor"), GuiEventListener {
+
+  private companion object {
+    const val DISPLAY_INTERVAL_MS = 50 // 每秒 20 帧
+  }
 
   private val emergencyBanner = JLabel("当前处于急停状态", JLabel.CENTER).apply {
     isOpaque = true
@@ -80,7 +85,7 @@ class LiftFrame(val config: JinBoConfig) : JFrame("JinBo Lift Monitor"), GuiEven
   }
 
   private fun setupScheduler() {
-    Timer(100) {
+    Timer(DISPLAY_INTERVAL_MS) {
       // 回放模式下暂停实时拉取，界面由 replayer 驱动
       if (replayPanel.isReplaying) return@Timer
       val str = JinBoFetcher.fetch(config.id)
@@ -95,10 +100,16 @@ class LiftFrame(val config: JinBoConfig) : JFrame("JinBo Lift Monitor"), GuiEven
     // 仿真核心和 HTTP 请求不应依赖 Swing 是否可用；没有显示窗口时不构造 GUI。
     if (!isDisplayable) return
 
-    // 缓冲到录制器，等待归入当前回放帧
-    JinBoRecorder.bufferLog(config.id, "${event.topic}:${event.msg}")
-
     eventLogPanel.appendLog(event)
+  }
+
+  /** 回放器只更新回放日志显示，不写入录制文件。 */
+  fun renderReplayLogs(frames: List<JinBoFrame>, index: Int) {
+    eventLogPanel.renderReplayLogs(frames, index)
+  }
+
+  fun clearLog() {
+    eventLogPanel.clearLog()
   }
 
   private fun updateEmergencyBanner(emergencyStopped: Boolean) {

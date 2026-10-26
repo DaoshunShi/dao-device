@@ -3,11 +3,10 @@ package org.dao.device.lift.jinbo.fe
 import com.fasterxml.jackson.module.kotlin.jacksonTypeRef
 import org.dao.device.common.GuiEventListener
 import org.dao.device.common.JsonHelper
+import org.dao.device.lift.jinbo.JinBoBtnService
 import org.dao.device.lift.jinbo.JinBoConfig
 import org.dao.device.lift.jinbo.JinBoLiftStatus
 import org.dao.device.lift.jinbo.JinBoReq
-import org.dao.device.lift.jinbo.JinBoReqSource
-import org.dao.device.lift.jinbo.JinBoServer
 import org.dao.device.lift.jinbo.event.LiftEvent
 import java.awt.BasicStroke
 import java.awt.Color
@@ -46,10 +45,7 @@ class TriangleCircle(
         println("Clicked on TriangleCircle")
         active = !active
 
-        JinBoServer.request(
-          config.id,
-          JinBoReq(floorIdx, JinBoReqSource.OutDoor, if (up) JinBoLiftStatus.Up else JinBoLiftStatus.Down),
-        )
+        JinBoBtnService.pressOutDoor(config.id, floorIdx, if (up) JinBoLiftStatus.Up else JinBoLiftStatus.Down)
 
         repaint()
       }

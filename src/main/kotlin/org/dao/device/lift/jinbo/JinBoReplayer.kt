@@ -1,11 +1,7 @@
 package org.dao.device.lift.jinbo
 
-import com.fasterxml.jackson.module.kotlin.jacksonTypeRef
 import org.dao.device.common.JsonHelper
-import org.dao.device.lift.jinbo.event.LiftEvent
-import org.dao.device.lift.jinbo.fe.JinBoEventBus
 import java.io.File
-import javax.swing.SwingUtilities
 import javax.swing.Timer
 
 /**
@@ -13,21 +9,20 @@ import javax.swing.Timer
  *
  * 职责：
  * - 读取 logs/replay*.log 的 JSONL 帧，按 liftId 过滤、按 ts 升序，构建帧序列。
- * - 维护当前帧指针；1fps 单步播放，支持快进/快退（改 Timer 周期）、seek。
- * - 通过 JinBoEventBus 重放 outside/liftState/inside/tcp 四个事件，
- *   事件的 topic 与 JSON 结构与 JinBoFetcher.fetch 完全一致，绘制组件零改动即可渲染历史状态。
+ * - 维护当前帧指针；2fps 播放，支持快进/快退、seek。
+ * - 通过 onFrameChanged 报告当前帧，回放事件由 JinBoReplayService 转换。
  *
  * 说明：录制侧做了去重（相邻相同状态不落帧），故帧序列是稀疏的。
  * seek(ts) 采用“取 ts <= 目标时刻的最后一帧”，静止空档也能正确停住。
  *
- * 本类不负责任何 UI 组件的创建；UI（开关、时间轴、日志分色）由 LiftFrame 侧驱动，
- * 通过 onFrameChanged 回调获知当前帧变化。
+ * 本类只维护回放时间，不直接操作 UI 或日志。
  */
 class JinBoReplayer(private val liftId: String) {
 
   companion object {
     private const val LOG_DIR = "logs"
-    private const val BASE_STEP_MS = 1000 // 1fps 基准步长，与仿真 tick 一致
+    private const val PLAYBACK_INTERVAL_MS = 500 // 每秒 2 帧
+    private const val BASE_STEP_MS = 500L // 每帧推进的虚拟时间
 
     /** 列出 logs 目录下所有回放文件名（replay.log 及轮转文件），按名称排序 */
     fun listReplayFiles(): List<String> {
@@ -39,15 +34,15 @@ class JinBoReplayer(private val liftId: String) {
   }
 
   private var frames: List<JinBoFrame> = emptyList()
-  private var clockTs: Long = 0 // 虚拟时钟（毫秒），回放按真实时间逐秒推进
-  private var speed = 1 // 步进倍率：正数快进，负数快退，1 = 正常（每 tick ±1 秒）
+  private var clockTs: Long = 0 // 虚拟时钟（毫秒），回放按真实时间推进
+  private var speed = 1 // 步进倍率：正数快进，负数快退，1 = 正常（每 tick ±0.5 秒）
   private var timer: Timer? = null
 
   /**
    * 每次渲染时回调，供 UI 更新时间轴/时间标签/日志分色。
    * @param frames 全部帧
    * @param index  当前虚拟时钟对应的帧下标（ts <= clockTs 的最后一帧）
-   * @param clockTs 当前虚拟时钟时间（逐秒），时间轴游标/时间标签用它
+   * @param clockTs 当前虚拟时钟时间，时间轴游标/时间标签用它
    */
   var onFrameChanged: ((frames: List<JinBoFrame>, index: Int, clockTs: Long) -> Unit)? = null
 
@@ -100,12 +95,12 @@ class JinBoReplayer(private val liftId: String) {
     return frames.size
   }
 
-  /** 开始/继续播放：虚拟时钟每 tick 前进/后退 |speed| 秒 */
+  /** 开始/继续播放：每 500ms 将虚拟时钟前进/后退 500ms × |speed|。 */
   fun play() {
     if (frames.isEmpty()) return
     stopTimer()
     // 到达末尾/开头时再按播放，从边界继续
-    timer = Timer(BASE_STEP_MS) { tick() }.apply { start() }
+    timer = Timer(PLAYBACK_INTERVAL_MS) { tick() }.apply { start() }
   }
 
   /** 暂停播放（保留虚拟时钟位置） */
@@ -152,9 +147,9 @@ class JinBoReplayer(private val liftId: String) {
     clockTs = 0
   }
 
-  /** 每 tick 按真实时间逐秒推进虚拟时钟（快进/快退改变步进秒数与方向） */
+  /** 每 500ms 推进虚拟时钟（快进/快退改变倍率和方向）。 */
   private fun tick() {
-    val stepMs = BASE_STEP_MS.toLong() * kotlin.math.abs(speed) * if (speed >= 0) 1 else -1
+    val stepMs = BASE_STEP_MS * kotlin.math.abs(speed) * if (speed >= 0) 1 else -1
     val next = clockTs + stepMs
     when {
       next <= firstTs -> {
@@ -174,51 +169,11 @@ class JinBoReplayer(private val liftId: String) {
     }
   }
 
-  /** 渲染当前虚拟时钟对应的帧：重放 4 个事件 + 通知 UI（携带 clockTs 供逐秒显示） */
+  /** 通知调用方当前帧及虚拟时钟。 */
   private fun renderCurrent() {
     val index = indexAt(clockTs)
-    val frame = frames.getOrNull(index) ?: return
-    fireFrame(frame)
+    if (frames.getOrNull(index) == null) return
     onFrameChanged?.invoke(frames, index, clockTs)
-  }
-
-  /**
-   * 通过 event-bus 重放一帧，topic 与结构完全对齐 JinBoFetcher.fetch。
-   * 在 EDT 上触发，保证 Swing 组件安全重绘。
-   */
-  private fun fireFrame(frame: JinBoFrame) {
-    val run = Runnable {
-      JinBoEventBus.fire(
-        liftId,
-        LiftEvent("outside", JsonHelper.mapper.writeValueAsString(
-          frame.reqs.filter { it.source == JinBoReqSource.OutDoor },
-        )),
-      )
-      JinBoEventBus.fire(
-        liftId,
-        LiftEvent("liftState", JsonHelper.mapper.writeValueAsString(
-          mapOf(
-            "h" to frame.h,
-            "status" to frame.doorStatus,
-            "doors" to frame.doors,
-            "emergencyStopped" to frame.emergencyStopped,
-          ),
-        )),
-      )
-      JinBoEventBus.fire(
-        liftId,
-        LiftEvent("inside", JsonHelper.mapper.writeValueAsString(
-          frame.reqs.filter { it.source == JinBoReqSource.InDoor },
-        )),
-      )
-      JinBoEventBus.fire(
-        liftId,
-        LiftEvent("tcp", JsonHelper.mapper.writeValueAsString(
-          frame.reqs.filter { it.source == JinBoReqSource.Tcp },
-        )),
-      )
-    }
-    if (SwingUtilities.isEventDispatchThread()) run.run() else SwingUtilities.invokeLater(run)
   }
 
   private fun stopTimer() {

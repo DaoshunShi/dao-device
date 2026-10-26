@@ -245,15 +245,17 @@ class ServerHandler(val liftId: String, val server: JinBoTcpServer) : SimpleChan
       0x3e8 -> {
         // 到指定楼层
         val req: JinBoTcpGoToReq = JsonHelper.mapper.readValue(msg.data, jacksonTypeRef())
-        // tcp-goto 日志由 JinBoServer.request 按来源统一打印，此处不再重复
-        val resp = JinBoServer.request(liftId, JinBoReq(req.destFloor.toInt(), doorCodes = req.doorCodes))
+        val resp = JinBoBtnService.press(
+          liftId,
+          JinBoReq(req.destFloor.toInt(), doorCodes = req.doorCodes),
+        )
         JsonHelper.writeValueAsString(resp)
       }
 
       0x3e9 -> {
         // 关门
         val resp = JinBoServer.close(liftId)
-        JinBoServer.logEvent(liftId, LiftEvent("tcp-close", JsonHelper.writeValueAsString(resp)))
+        JinBoLogService.logEvent(liftId, LiftEvent("tcp-close", JsonHelper.writeValueAsString(resp)))
         JsonHelper.writeValueAsString(resp)
       }
 
@@ -280,7 +282,7 @@ class ServerHandler(val liftId: String, val server: JinBoTcpServer) : SimpleChan
 
   override fun exceptionCaught(ctx: ChannelHandlerContext, cause: Throwable) {
     logger.error("Exception caught: ${cause.message}")
-    JinBoServer.logEvent(liftId, LiftEvent("Tcp exception", cause.message ?: ""))
+    JinBoLogService.logEvent(liftId, LiftEvent("Tcp exception", cause.message ?: ""))
     // 只关闭连接；计数递减统一交给 channelInactive，避免重复扣减
     ctx.close()
   }
@@ -297,7 +299,7 @@ class ServerHandler(val liftId: String, val server: JinBoTcpServer) : SimpleChan
       counted.set(true)
 
       val msg = "Client connected: ${ctx?.channel()?.remoteAddress()}"
-      JinBoServer.logEvent(liftId, LiftEvent("Connected", msg))
+      JinBoLogService.logEvent(liftId, LiftEvent("Connected", msg))
       super.channelActive(ctx)
     }
   }
@@ -306,7 +308,7 @@ class ServerHandler(val liftId: String, val server: JinBoTcpServer) : SimpleChan
     releaseSlot()
     val msg = "Client disconnected: ${ctx?.channel()?.remoteAddress()}"
     logger.error(msg)
-    JinBoServer.logEvent(liftId, LiftEvent("DisConnected", msg))
+    JinBoLogService.logEvent(liftId, LiftEvent("DisConnected", msg))
     ctx?.close()
     super.channelInactive(ctx)
   }

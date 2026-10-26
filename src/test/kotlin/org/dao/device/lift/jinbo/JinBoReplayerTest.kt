@@ -3,7 +3,9 @@ package org.dao.device.lift.jinbo
 import org.dao.device.common.JsonHelper
 import org.junit.jupiter.api.Test
 import java.io.File
+import javax.swing.SwingUtilities
 import kotlin.test.assertEquals
+import kotlin.test.assertTrue
 
 class JinBoReplayerTest {
 
@@ -45,6 +47,31 @@ class JinBoReplayerTest {
       replayer.seek(replayer.currentTs + 10_000L)
       assertEquals(11_000L, replayer.currentTs)
       assertEquals(1, changes.last())
+    }
+  }
+
+  @Test
+  fun `playback advances virtual clock every five hundred milliseconds`() {
+    withReplayFile("replayer-test.log", listOf(1_000L, 1_500L, 2_000L)) {
+      val replayer = JinBoReplayer(LIFT_ID)
+      replayer.load(FILE_NAME)
+      val changes = mutableListOf<Pair<Int, Long>>()
+      replayer.onFrameChanged = { _, index, clockTs -> changes.add(index to clockTs) }
+
+      SwingUtilities.invokeAndWait { replayer.play() }
+      try {
+        val deadline = System.currentTimeMillis() + 2_000L
+        while (changes.size < 2 && System.currentTimeMillis() < deadline) {
+          Thread.sleep(20)
+        }
+        assertTrue(changes.size >= 2, "500ms playback ticks should advance at least twice")
+        assertEquals(500L, changes[0].second - 1_000L)
+        assertEquals(500L, changes[1].second - changes[0].second)
+        assertEquals(1, changes[0].first)
+        assertEquals(2, changes[1].first)
+      } finally {
+        SwingUtilities.invokeAndWait { replayer.pause() }
+      }
     }
   }
 

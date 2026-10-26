@@ -1,8 +1,7 @@
 package org.dao.device.lift.jinbo.fe
 
 import org.dao.device.lift.jinbo.JinBoConfig
-import org.dao.device.lift.jinbo.JinBoServer
-import org.dao.device.lift.jinbo.event.LiftEvent
+import org.dao.device.lift.jinbo.JinBoBtnService
 import java.awt.BorderLayout
 import java.awt.GridLayout
 import javax.swing.JButton
@@ -30,8 +29,7 @@ class LiftTcpPanel(config: JinBoConfig) : JPanel() {
     add(
       JButton("关门").apply {
         addActionListener {
-          JinBoServer.logEvent(config.id, LiftEvent("tcp-btn-close", "TCP栏关门按钮"))
-          JinBoServer.close(config.id)
+          JinBoBtnService.pressClose(config.id, fromTcp = true)
         }
       },
     )

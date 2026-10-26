@@ -9,7 +9,7 @@ import java.util.concurrent.CopyOnWriteArrayList
  * 回放录制器
  *
  * 设计要点：
- * - 录制搭在仿真 tick 上（JinBoServer.processLift 内），一个 tick 一帧，帧率 = 仿真 1fps。
+ * - 录制搭在仿真 tick 上（JinBoServer.processLift 内），一个 tick 一帧，最高帧率 = 仿真 20fps。
  * - capture 在调用方的 synchronized(lr) 内执行，取到的是一致快照，无需额外加锁。
  * - 帧以 JSONL（每行一帧）写入 REPLAY logger → logs/replay.log，复用 log4j2 轮转/删除机制。
  * - 去重：可视状态与上一写入帧完全相同、且本帧无日志时跳过写盘。
@@ -28,7 +28,7 @@ object JinBoRecorder {
 
   /**
    * 缓冲一条事件日志，等待下一次 capture 归入当前帧。
-   * 由 JinBoServer.logEvent / LiftFrame.logEvent 调用。
+   * 由 JinBoLogService / LiftFrame.logEvent 调用。
    */
   fun bufferLog(liftId: String, line: String) {
     logBuf.getOrPut(liftId) { CopyOnWriteArrayList() }.add(line)

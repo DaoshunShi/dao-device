@@ -1,10 +1,7 @@
 package org.dao.device.lift.jinbo.fe
 
 import org.dao.device.lift.jinbo.JinBoConfig
-import org.dao.device.lift.jinbo.JinBoReq
-import org.dao.device.lift.jinbo.JinBoReqSource
-import org.dao.device.lift.jinbo.JinBoServer
-import org.dao.device.lift.jinbo.event.LiftEvent
+import org.dao.device.lift.jinbo.JinBoBtnService
 import java.awt.BorderLayout
 import java.awt.GridLayout
 import javax.swing.JButton
@@ -32,18 +29,14 @@ class LiftInsidePanel(config: JinBoConfig) : JPanel() {
     add(
       JButton("开门").apply {
         addActionListener {
-          val floor = JinBoServer.lifts[config.id]?.curFloor ?: 0
-          // 开门单独记 in-open，故 request 传 log=false 抑制默认 in-goto
-          JinBoServer.request(config.id, JinBoReq(destFloor = floor, source = JinBoReqSource.InDoor), log = false)
-          JinBoServer.logEvent(config.id, LiftEvent("in-open", "destFloor=$floor"))
+          JinBoBtnService.pressOpen(config.id)
         }
       },
     )
     add(
       JButton("关门").apply {
         addActionListener {
-          JinBoServer.logEvent(config.id, LiftEvent("in-close", "关门按钮"))
-          JinBoServer.close(config.id)
+          JinBoBtnService.pressClose(config.id)
         }
       },
     )
