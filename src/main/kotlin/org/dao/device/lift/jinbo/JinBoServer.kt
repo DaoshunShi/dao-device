@@ -9,7 +9,6 @@ import java.util.concurrent.ConcurrentHashMap
 import java.util.concurrent.ExecutorService
 import java.util.concurrent.Executors
 import java.util.concurrent.Future
-import kotlin.math.abs
 
 /**
  * 仿真金博电梯
@@ -41,9 +40,6 @@ object JinBoServer {
   private var worker: Future<*>? = null
 
   val lifts: MutableMap<String, JinBoRuntime> = ConcurrentHashMap()
-
-  private const val MAX_STEP_SECONDS = 1.0 // 单次位移上限，避免线程暂停后跳层
-  private const val DEFAULT_MOVE_SECONDS = 0.1 // 没有上一帧时间时，按主循环周期估算
 
   fun init() {
     logger.info("JinBoLiftService init")
@@ -95,7 +91,7 @@ object JinBoServer {
   fun processLift(lr: JinBoRuntime) {
     synchronized(lr) {
       // 按高度和已启用楼层定位当前层，避免外部刚更新 curFloor/h 时仍用旧楼层做到站判定。
-      syncCurrentFloor(lr)
+      JinBoMovement.syncCurrentFloor(lr)
       if (lr.emergencyStopped) {
         // 急停期间也录制一帧，保证时间轴连续
         JinBoRecorder.capture(lr)
@@ -103,24 +99,24 @@ object JinBoServer {
       }
 
       // 先完成已到期的开门/关门操作，再判断是否开始移动
-      updateDoorState(lr)
+      JinBoDoorController.update(lr)
       // 只有已经停在当前楼层且目标门打开，才说明本次呼梯完成。
       // 刚到站时门仍为 OPENING，路过或正在离开时也不能清理请求。
       if (!lr.lifting) cleanOpenedFloorReq(lr)
 
       // 门流程结束前不选择下一站，保证到站后完整等待自动关门延迟。
-      if (lr.targetFloor == null && !lr.holdAtCurrentFloor()) selectBetterReq(lr)
+      if (lr.targetFloor == null && !lr.holdAtCurrentFloor()) JinBoRequestSelector.selectBetterReq(lr)
 
       // 运行中收到当前方向上更近的停靠请求时，不能等到原目标楼层；
       // 在越过新目标楼层前切换目标，使其正常停靠、开门并清理该请求。
-      retargetNearerFloor(lr)
+      JinBoRequestSelector.retargetNearerFloor(lr)
 
       // 跨层移动必须先关闭全部门；门关闭后本 tick 才开始移动
       if (lr.targetFloor != null && lr.targetFloor != lr.curFloor) {
-        closeDoors(lr)
+        JinBoDoorController.close(lr)
         if (lr.canLifting()) {
           lr.lifting = true
-          liftStep(lr)
+          JinBoMovement.advance(lr)
         }
       }
 
@@ -128,24 +124,6 @@ object JinBoServer {
 
       // 录制本 tick 的状态快照
       JinBoRecorder.capture(lr)
-    }
-  }
-
-  /** 用实际高度校正当前楼层，防止到站后仍以移动前楼层处理请求。 */
-  private fun syncCurrentFloor(lr: JinBoRuntime) {
-    val floor = lr.config.floors
-      .filter { !it.disabled }
-      .minByOrNull { abs(it.height - lr.h) }
-    if (floor != null && abs(floor.height - lr.h) < 1e-6) lr.curFloor = floor.index
-  }
-
-  /** 按每扇门的状态刷新其关闭过程；门已关闭时无需处理。 */
-  private fun updateClosingDoors(lr: JinBoRuntime, now: Date) {
-    lr.doors.filter { it.status == JinBoDoorStatus.CLOSING }.forEach { door ->
-      val startedAt = door.opStartOn ?: now.also { door.opStartOn = it }
-      if (now.time - startedAt.time >= lr.config.closeCost) {
-        door.setStatus(JinBoDoorStatus.CLOSE, now)
-      }
     }
   }
 
@@ -163,161 +141,7 @@ object JinBoServer {
 
   /** 梯外呼梯仅在电梯本次运行方向上有效；未指定方向的旧请求保持兼容。 */
   private fun matchesTravelDirection(lr: JinBoRuntime, req: JinBoReq): Boolean =
-    arrivesFromDirection(lr, req, lr.travelDirection)
-
-  private fun isTopFloor(lr: JinBoRuntime, floorIndex: Int): Boolean {
-    val floors = lr.config.floors.filter { !it.disabled }
-    val floor = floors.firstOrNull { it.index == floorIndex } ?: return false
-    return floors.all { it.height <= floor.height }
-  }
-
-  private fun isBottomFloor(lr: JinBoRuntime, floorIndex: Int): Boolean {
-    val floors = lr.config.floors.filter { !it.disabled }
-    val floor = floors.firstOrNull { it.index == floorIndex } ?: return false
-    return floors.all { it.height >= floor.height }
-  }
-
-  /** 梯外呼梯在目标楼层所在端点反向时，仍由到站方向判定能否服务。 */
-  private fun arrivesFromDirection(
-    lr: JinBoRuntime,
-    req: JinBoReq,
-    arrivalDirection: JinBoLiftStatus,
-  ): Boolean {
-    if (req.source != JinBoReqSource.OutDoor || req.type == null) return true
-    return when (req.type) {
-      JinBoLiftStatus.Down -> arrivalDirection != JinBoLiftStatus.Up || isTopFloor(lr, req.destFloor)
-      JinBoLiftStatus.Up -> arrivalDirection != JinBoLiftStatus.Down || isBottomFloor(lr, req.destFloor)
-      JinBoLiftStatus.Idle -> true
-    }
-  }
-
-  private fun retargetNearerFloor(lr: JinBoRuntime) {
-    val targetFloor = lr.targetFloor ?: return
-    if (!lr.lifting && lr.liftStatus != JinBoLiftStatus.Idle) return
-    val current = lr.curFloor
-    val next = when (lr.liftStatus) {
-      JinBoLiftStatus.Up -> lr.reqs
-        .filter {
-          it.destFloor > current && it.destFloor < targetFloor &&
-            matchesTravelDirection(lr, it)
-        }
-        .minOfOrNull { it.destFloor }
-      JinBoLiftStatus.Down -> lr.reqs
-        .filter {
-          it.destFloor < current && it.destFloor > targetFloor &&
-            matchesTravelDirection(lr, it)
-        }
-        .maxOfOrNull { it.destFloor }
-      JinBoLiftStatus.Idle -> null
-    } ?: return
-    lr.targetFloor = next
-  }
-
-  /**
-   * 选择更优的呼叫电梯请求
-   */
-  private fun selectBetterReq(lr: JinBoRuntime) {
-    val direction = if (lr.liftStatus == JinBoLiftStatus.Idle) lr.travelDirection else lr.liftStatus
-    val sameDirectionFloor = when (direction) {
-      JinBoLiftStatus.Up -> lr.reqs
-        .filter { it.destFloor > lr.curFloor && matchesTravelDirection(lr, it) }
-        .minOfOrNull { it.destFloor }
-
-      JinBoLiftStatus.Down -> lr.reqs
-        .filter { it.destFloor < lr.curFloor && matchesTravelDirection(lr, it) }
-        .maxOfOrNull { it.destFloor }
-
-      JinBoLiftStatus.Idle -> lr.reqs
-        .filter { it.destFloor != lr.curFloor }
-        .minByOrNull { abs(it.destFloor - lr.curFloor) }
-        ?.destFloor
-    }
-
-    // 当前方向已无后续请求时才反向；同层反方向呼梯不能成为目标。
-    val oppositeDirectionFloor = lr.reqs
-      .filter {
-        it.destFloor != lr.curFloor &&
-          matchesRequestDirection(it, oppositeDirectionOf(direction))
-      }
-      .minByOrNull { abs(it.destFloor - lr.curFloor) }
-      ?.destFloor
-    // 同层同方向梯外呼梯需要停靠开门；选中的同层目标不能丢掉当前方向。
-    // 空闲电梯停在同层时没有既定运行方向，任一端点方向呼梯都应开门服务。
-    val sameFloorOutDoor = lr.reqs.any { req ->
-      req.destFloor == lr.curFloor &&
-        (direction == JinBoLiftStatus.Idle || matchesRequestDirection(req, direction))
-    }
-    lr.targetFloor = sameDirectionFloor
-      ?: if (sameFloorOutDoor) lr.curFloor else oppositeDirectionFloor
-    if (lr.targetFloor != null) {
-      val floor = lr.targetFloor ?: error("目标楼层不应为空")
-      lr.liftStatus = when {
-        floor == lr.curFloor && sameFloorOutDoor && direction != JinBoLiftStatus.Idle -> direction
-        floor > lr.curFloor -> JinBoLiftStatus.Up
-        floor < lr.curFloor -> JinBoLiftStatus.Down
-        // 空闲时的同层呼梯先开门；方向只影响请求是否仍有效，不用于移动。
-        else -> lr.reqs.firstOrNull { it.destFloor == lr.curFloor }?.type ?: JinBoLiftStatus.Idle
-      }
-      lr.travelDirection = lr.liftStatus
-      // 同层请求也要先到达并开门，不能因为无需移动而跳过 afterArrive。
-      lr.lifting = false
-    }
-
-    if (lr.targetFloor == null) {
-      lr.liftStatus = JinBoLiftStatus.Idle
-      lr.travelDirection = JinBoLiftStatus.Idle
-      lr.lifting = false
-    }
-  }
-
-  private fun oppositeDirectionOf(direction: JinBoLiftStatus): JinBoLiftStatus = when (direction) {
-    JinBoLiftStatus.Up -> JinBoLiftStatus.Down
-    JinBoLiftStatus.Down -> JinBoLiftStatus.Up
-    JinBoLiftStatus.Idle -> JinBoLiftStatus.Idle
-  }
-
-  /** out-goto 的方向与电梯接下来计划运行的方向一致时，才能作为停靠目标。 */
-  private fun matchesRequestDirection(req: JinBoReq, direction: JinBoLiftStatus): Boolean =
-    req.source != JinBoReqSource.OutDoor ||
-      req.type == null ||
-      req.type == direction
-
-  /**
-   * 电梯移动
-   */
-  private fun liftStep(lr: JinBoRuntime) {
-    if (!lr.lifting || !lr.canLifting()) return
-
-    val tf = lr.config.floors.firstOrNull { it.index == lr.targetFloor } ?: return // 找不到，就不升降
-    val now = System.currentTimeMillis()
-    val elapsedSeconds = lr.lastMoveOn?.let { (now - it) / 1000.0 } ?: DEFAULT_MOVE_SECONDS
-    lr.lastMoveOn = now
-    val stepH = lr.config.liftSpeed * elapsedSeconds.coerceIn(0.0, MAX_STEP_SECONDS)
-
-    when (lr.liftStatus) {
-      JinBoLiftStatus.Up -> {
-        if (lr.h + stepH >= tf.height) {
-          lr.h = tf.height
-        } else {
-          lr.h += stepH
-        }
-        lr.config.floors.lastOrNull { it.height <= lr.h }?.index?.let { lr.curFloor = it }
-      }
-
-      JinBoLiftStatus.Down -> {
-        if (lr.h - stepH <= tf.height) {
-          lr.h = tf.height
-        } else {
-          lr.h -= stepH
-        }
-        lr.config.floors.firstOrNull { it.height >= lr.h }?.index?.let { lr.curFloor = it }
-      }
-
-      else -> {
-        lr.curFloor = lr.config.floors.minBy { abs(it.height - lr.h) }.index
-      }
-    }
-  }
+    JinBoDirection.arrivalMatches(lr.config, req, lr.travelDirection)
 
   /**
    * 电梯到达目标楼层后的处理
@@ -332,88 +156,9 @@ object JinBoServer {
       lr.targetFloor = null
       lr.lastMoveOn = null
       val now = Date()
-      openDoors(lr, doorCodes, now)
+      JinBoDoorController.open(lr, doorCodes, now)
     }
   }
-
-  /**
-   * 打开指定门，并从到站时刻开始计算自动关门延迟。
-   * 指定门正在开启时不中断；已经开启时从新的开门时刻重新计算倒计时。
-   */
-  private fun openDoors(lr: JinBoRuntime, doorCodes: List<Int>, openedAt: Date = Date()): String? {
-    val targets = doorCodes.distinct().ifEmpty { listOf(0) }.mapNotNull { code ->
-      lr.doors.firstOrNull { it.code == code }
-        ?: return "门号 $code 不存在"
-    }
-    if (targets.isEmpty()) return "电梯没有可打开的门"
-    targets.forEach { door ->
-      door.openOn = openedAt
-      if (door.status != JinBoDoorStatus.OPENING) {
-        door.setStatus(JinBoDoorStatus.OPENING, openedAt)
-      }
-    }
-    return null
-  }
-
-  /** 关闭全部门；电梯等所有门关闭后才开始移动。 */
-  private fun closeDoors(lr: JinBoRuntime): String? {
-    val now = Date()
-    lr.doors.forEach { door ->
-      when (door.status) {
-        JinBoDoorStatus.CLOSE, JinBoDoorStatus.CLOSING -> Unit
-        JinBoDoorStatus.OPENING, JinBoDoorStatus.OPEN -> door.setStatus(JinBoDoorStatus.CLOSING, now)
-        JinBoDoorStatus.ERROR -> Unit
-      }
-    }
-    return null
-  }
-
-  /** 更新门状态；门动作可能发生在跨层请求已选定、电梯尚未移动的关门过程中。 */
-  private fun updateDoorState(lr: JinBoRuntime) {
-    val now = Date()
-    lr.doors.forEach { door ->
-      when (door.status) {
-        JinBoDoorStatus.OPENING -> {
-          val startedAt = door.opStartOn ?: now.also { door.opStartOn = it }
-          if (now.time - startedAt.time >= lr.config.openCost) {
-            door.markOpen(now)
-          }
-        }
-
-        JinBoDoorStatus.CLOSING -> Unit
-
-        JinBoDoorStatus.OPEN -> {
-          val openedAt = door.openOn ?: now.also { door.openOn = it }
-          if (now.time - openedAt.time >= lr.config.closeDelay) {
-            door.setStatus(JinBoDoorStatus.CLOSING, now)
-          }
-        }
-
-        JinBoDoorStatus.CLOSE, JinBoDoorStatus.ERROR -> Unit
-      }
-    }
-    updateClosingDoors(lr, now)
-  }
-
-  /** 同层呼梯重新打开对应门，并从当前时刻重新计算自动关门延迟。 */
-  private fun refreshSameFloorTimer(lr: JinBoRuntime, doorCodes: List<Int>) {
-    val requested = doorCodes.ifEmpty { lr.doors.take(1).map { it.code } }
-    val now = Date()
-    requested.mapNotNull { code -> lr.doors.firstOrNull { it.code == code } }.forEach { door ->
-      when (door.status) {
-        JinBoDoorStatus.OPEN -> door.openOn = now
-        JinBoDoorStatus.CLOSING -> {
-          door.openOn = now
-          door.setStatus(JinBoDoorStatus.OPENING, now)
-        }
-        else -> Unit
-      }
-    }
-  }
-
-  /** 未指定门号时使用默认 0 号门。 */
-  private fun resolveDoorCodes(req: JinBoReq): JinBoReq =
-    if (req.doorCodes.isEmpty()) req.copy(doorCodes = listOf(0)) else req
 
   /**
    * 请求电梯到指定楼层
@@ -428,14 +173,14 @@ object JinBoServer {
       if (invalidCode != null) {
         return JinBoResp("400", "${liftId} 电梯不存在门号 $invalidCode")
       }
-      val resolvedReq = resolveDoorCodes(req)
+      val resolvedReq = JinBoDoorController.resolveDoorCodes(req)
       if (req.destFloor == lift.curFloor) {
         // 同层呼梯也先进入请求队列；只有目标门真正打开后才算完成并清理。
         if (lift.reqs.none { it == resolvedReq }) {
           lift.reqs.add(resolvedReq)
         }
         if (matchesTravelDirection(lift, resolvedReq)) {
-          refreshSameFloorTimer(lift, resolvedReq.doorCodes)
+          JinBoDoorController.refreshSameFloorTimer(lift, resolvedReq.doorCodes)
         }
         return JinBoResp()
       }
@@ -466,7 +211,7 @@ object JinBoServer {
       if (lift.isMoving()) {
         return JinBoResp("400", "电梯正在运行中，不能开门")
       }
-      val error = openDoors(lift, doorCodes)
+      val error = JinBoDoorController.open(lift, doorCodes)
       if (error != null) {
         return JinBoResp("400", error)
       }
@@ -484,8 +229,7 @@ object JinBoServer {
       if (lr.emergencyStopped) {
         return JinBoResp("409", EMERGENCY_STOP_MSG)
       }
-      val error = closeDoors(lr)
-      if (error != null) return JinBoResp("400", error)
+      JinBoDoorController.close(lr)
       lr.targetFloor = null
       logEvent(liftId, LiftEvent("close", "关闭全部门"))
       return JinBoResp()
