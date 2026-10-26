@@ -13,13 +13,12 @@ import java.beans.PropertyChangeEvent
 import java.beans.PropertyChangeListener
 import java.util.function.Consumer
 import javax.swing.*
-import javax.swing.table.DefaultTableModel
 
 class JinBoConfigPanel(val config: JinBoConfig) :
   JPanel(),
   GuiEventListener {
   // 配置字段输入框
-  private val fieldInputs: MutableMap<String?, JTextField?> = HashMap<String?, JTextField?>()
+  private val fieldInputs: MutableMap<ConfigField, JTextField> = linkedMapOf()
   private var logTcpInput: JCheckBox? = null
   private val emergencyStopButton = JButton()
 
@@ -27,7 +26,7 @@ class JinBoConfigPanel(val config: JinBoConfig) :
   private var isEditMode = false
 
   // 定时器，用于查看状态下定时更新配置
-  private val configUpdateTimer: Timer?
+  private val configUpdateTimer: Timer
 
   // 创建一个更浅的灰色背景
   private val readOnlyBackground = Color(240, 240, 240) // 更浅的灰色
@@ -47,15 +46,15 @@ class JinBoConfigPanel(val config: JinBoConfig) :
     add(titleLabel)
 
     // 添加字段
-    for (fieldName in FIELD_NAMES) {
-      val fieldLabel = JLabel("$fieldName:")
+    for (configField in CONFIG_FIELDS) {
+      val fieldLabel = JLabel("${configField.label}:")
       add(fieldLabel)
 
-      val field = JTextField(6)
+      val field = JTextField(configField.value(config).toString(), 6)
       field.minimumSize = Dimension(60, field.preferredSize.height)
       field.maximumSize = Dimension(80, field.preferredSize.height)
       field.setEditable(false) // 初始为只读状态
-      fieldInputs[fieldName] = field
+      fieldInputs[configField] = field
       add(field)
     }
 
@@ -107,8 +106,8 @@ class JinBoConfigPanel(val config: JinBoConfig) :
 
           // 启用所有输入框
           fieldInputs.values.forEach(
-            Consumer { field: JTextField? ->
-              field!!.isEditable = true
+            Consumer { field: JTextField ->
+              field.isEditable = true
               field.background = Color.WHITE
             },
           )
@@ -120,8 +119,8 @@ class JinBoConfigPanel(val config: JinBoConfig) :
 
           // 禁用所有输入框
           fieldInputs.values.forEach(
-            Consumer { field: JTextField? ->
-              field!!.isEditable = false
+            Consumer { field: JTextField ->
+              field.isEditable = false
               field.background = readOnlyBackground // 使用更浅的灰色
             },
           )
@@ -131,8 +130,8 @@ class JinBoConfigPanel(val config: JinBoConfig) :
 
     // 初始设置查看状态的背景色
     fieldInputs.values.forEach(
-      Consumer { field: JTextField? ->
-        field!!.background = readOnlyBackground // 使用更浅的灰色
+      Consumer { field: JTextField ->
+        field.background = readOnlyBackground // 使用更浅的灰色
       },
     )
 
@@ -156,33 +155,30 @@ class JinBoConfigPanel(val config: JinBoConfig) :
   private fun saveConfig() {
     // 打印所有输入框的值
     println("当前配置:")
-    fieldInputs.forEach { (name: String?, field: JTextField?) ->
-      println("$name: ${field!!.text}")
+    fieldInputs.forEach { (configField, field) ->
+      println("${configField.label}: ${field.text}")
     }
 
     // 这里可以添加保存到配置文件的逻辑
     // 例如: saveConfigToFile();
-    val doorCount = fieldInputs["电梯门数量"]!!.text.toIntOrNull()
-    if (doorCount == null || doorCount < 1) {
+    val editedConfig = try {
+      CONFIG_FIELDS.fold(config) { current, configField ->
+        configField.apply(current, fieldInputs.getValue(configField).text)
+      }.copy(logTcp = logTcpInput?.isSelected ?: false)
+    } catch (e: NumberFormatException) {
+      JOptionPane.showMessageDialog(this, "配置项必须是有效数字", "配置错误", JOptionPane.ERROR_MESSAGE)
+      return
+    } catch (e: IllegalArgumentException) {
+      JOptionPane.showMessageDialog(this, e.message ?: "电梯配置无效", "配置错误", JOptionPane.ERROR_MESSAGE)
+      return
+    }
+    if (editedConfig.doorCount < 1) {
       JOptionPane.showMessageDialog(this, "电梯门数量必须是大于等于 1 的整数", "配置错误", JOptionPane.ERROR_MESSAGE)
       return
     }
 
     try {
-      JinBoServer.updateConfig(
-        config.copy(
-          port = fieldInputs["启动端口"]!!.text.toInt(),
-          openCost = fieldInputs["开门耗时"]!!.text.toInt(),
-          closeCost = fieldInputs["关门耗时"]!!.text.toInt(),
-          closeDelay = fieldInputs["自动关门延迟时间"]!!.text.toInt(),
-          liftSpeed = fieldInputs["上升速度"]!!.text.toDouble(),
-          logTcp = logTcpInput?.isSelected ?: false,
-          doorCount = doorCount,
-        ),
-      )
-    } catch (e: NumberFormatException) {
-      JOptionPane.showMessageDialog(this, "端口、耗时、延迟和速度必须是有效数字", "配置错误", JOptionPane.ERROR_MESSAGE)
-      return
+      JinBoServer.updateConfig(editedConfig)
     } catch (e: IllegalArgumentException) {
       JOptionPane.showMessageDialog(this, e.message ?: "电梯配置无效", "配置错误", JOptionPane.ERROR_MESSAGE)
       return
@@ -204,12 +200,7 @@ class JinBoConfigPanel(val config: JinBoConfig) :
       // 例如: Map<String, String> latestConfig = loadLatestConfig();
 
       // 模拟更新配置
-      fieldInputs["启动端口"]?.text = config.port.toString()
-      fieldInputs["开门耗时"]?.text = config.openCost.toString()
-      fieldInputs["关门耗时"]?.text = config.closeCost.toString()
-      fieldInputs["自动关门延迟时间"]?.text = config.closeDelay.toString()
-      fieldInputs["上升速度"]?.text = config.liftSpeed.toString()
-      fieldInputs["电梯门数量"]?.text = config.doorCount.toString()
+      fieldInputs.forEach { (configField, field) -> field.text = configField.value(config).toString() }
       // logTcpInput?.isSelected = config.logTcp
     }
   }
@@ -240,56 +231,23 @@ class JinBoConfigPanel(val config: JinBoConfig) :
   }
 
   companion object {
-    // 配置字段名称
-    private val FIELD_NAMES = arrayOf<String?>(
-      "启动端口",
-      "开门耗时",
-      "关门耗时",
-      "自动关门延迟时间",
-      "上升速度",
-      "电梯门数量",
+    private val CONFIG_FIELDS = listOf(
+      ConfigField("启动端口", { it.port }, { config, text -> config.copy(port = text.toInt()) }),
+      ConfigField("开门耗时", { it.openCost }, { config, text -> config.copy(openCost = text.toInt()) }),
+      ConfigField("关门耗时", { it.closeCost }, { config, text -> config.copy(closeCost = text.toInt()) }),
+      ConfigField("自动关门延迟时间", { it.closeDelay }, { config, text -> config.copy(closeDelay = text.toInt()) }),
+      ConfigField("上升速度", { it.liftSpeed }, { config, text -> config.copy(liftSpeed = text.toDouble()) }),
+      ConfigField("电梯门数量", { it.doorCount }, { config, text -> config.copy(doorCount = text.toInt()) }),
     )
   }
 
   private fun showFloorConfigDialog() {
-    val dialog = JDialog()
-    dialog.title = "楼层配置 - 电梯 ${config.id}"
-    dialog.layout = BorderLayout()
-    dialog.setSize(600, 400)
-    dialog.setLocationRelativeTo(this) // 居中显示
-
-    // 创建表格模型
-    val columnNames = arrayOf("楼层索引", "标签", "高度 (米)", "禁用")
-    val tableModel = DefaultTableModel(columnNames, 0)
-
-    // 填充数据
-    for (floor in config.floors.sortedBy { it.index }) {
-      tableModel.addRow(
-        arrayOf(
-          floor.index.toString(),
-          floor.label,
-          floor.height.toString(),
-          if (floor.disabled) "是" else "否",
-        ),
-      )
-    }
-
-    val table = JTable(tableModel)
-    table.fillsViewportHeight = true
-
-    val scrollPane = JScrollPane(table)
-    dialog.add(scrollPane, BorderLayout.CENTER)
-
-    // 添加底部按钮面板
-    val buttonPanel = JPanel(FlowLayout(FlowLayout.RIGHT))
-
-    val closeButton = JButton("关闭")
-    closeButton.addActionListener { dialog.dispose() }
-    buttonPanel.add(closeButton)
-
-    dialog.add(buttonPanel, BorderLayout.SOUTH)
-
-    dialog.isModal = true
-    dialog.isVisible = true
+    JinBoFloorConfigDialog(this, config).isVisible = true
   }
+
+  private data class ConfigField(
+    val label: String,
+    val value: (JinBoConfig) -> Number,
+    val apply: (JinBoConfig, String) -> JinBoConfig,
+  )
 }

@@ -4,8 +4,9 @@ import org.dao.device.common.JsonHelper
 import java.io.File
 
 object JinBoRepo {
-  private val CONFIG_DIR = "config"
-  private val DEFAULT_CONFIG_FILE = "default.json"
+  private const val CONFIG_DIR = "config"
+  private const val DEFAULT_CONFIG_FILE = "default.json"
+  private const val ELEVATOR_A_CONFIG_FILE = "elevator_A.json"
 
   fun load(): MutableMap<String, JinBoRuntime> {
     val configDir = File(CONFIG_DIR)
@@ -51,24 +52,7 @@ object JinBoRepo {
 
   private fun createDefaultLifts(): List<JinBoRuntime> {
     // 向后兼容的默认配置（4层电梯）
-    return listOf(
-      JinBoRuntime(
-        JinBoConfig(
-          "A",
-          8080,
-          listOf(
-            JinBoFloor(1, "L1", 0.0),
-            JinBoFloor(2, "L2", 3.0),
-            JinBoFloor(3, "L3", 6.0),
-            JinBoFloor(4, "L4", 9.0),
-          ),
-          0.6,
-          1 * 1000,
-          1 * 1000,
-          3 * 1000,
-        ),
-      ),
-    )
+    return listOf(JinBoRuntime(createDefaultConfig()))
   }
 
   fun persist() {
@@ -115,22 +99,6 @@ object JinBoRepo {
       println("Created config directory: ${configDir.absolutePath}")
     }
 
-    // 生成默认电梯配置（4层）
-    val defaultConfig = JinBoConfig(
-      "default",
-      8080,
-      listOf(
-        JinBoFloor(1, "L1", 0.0),
-        JinBoFloor(2, "L2", 3.0),
-        JinBoFloor(3, "L3", 6.0),
-        JinBoFloor(4, "L4", 9.0),
-      ),
-      0.6,
-      1 * 1000,
-      1 * 1000,
-      3 * 1000,
-    )
-
     // 生成电梯A配置（6层，包含一个禁用的楼层）
     val elevatorAConfig = JinBoConfig(
       "A",
@@ -150,11 +118,11 @@ object JinBoRepo {
     )
 
     try {
-      val defaultFile = File(configDir, "default.json")
-      JsonHelper.mapper.writerWithDefaultPrettyPrinter().writeValue(defaultFile, defaultConfig)
+      val defaultFile = File(configDir, DEFAULT_CONFIG_FILE)
+      JsonHelper.mapper.writerWithDefaultPrettyPrinter().writeValue(defaultFile, createDefaultConfig())
       println("Generated default configuration: ${defaultFile.absolutePath}")
 
-      val elevatorAFile = File(configDir, "elevator_A.json")
+      val elevatorAFile = File(configDir, ELEVATOR_A_CONFIG_FILE)
       JsonHelper.mapper.writerWithDefaultPrettyPrinter().writeValue(elevatorAFile, elevatorAConfig)
       println("Generated elevator A configuration: ${elevatorAFile.absolutePath}")
 
@@ -164,4 +132,19 @@ object JinBoRepo {
       e.printStackTrace()
     }
   }
+
+  private fun createDefaultConfig() = JinBoConfig(
+    "default",
+    8080,
+    listOf(
+      JinBoFloor(1, "L1", 0.0),
+      JinBoFloor(2, "L2", 3.0),
+      JinBoFloor(3, "L3", 6.0),
+      JinBoFloor(4, "L4", 9.0),
+    ),
+    0.6,
+    1 * 1000,
+    1 * 1000,
+    3 * 1000,
+  )
 }
