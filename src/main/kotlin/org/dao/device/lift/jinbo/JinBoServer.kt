@@ -1,5 +1,6 @@
 package org.dao.device.lift.jinbo
 
+import org.dao.device.common.JsonHelper
 import org.dao.device.lift.jinbo.event.LiftEvent
 import org.slf4j.LoggerFactory
 import java.util.*
@@ -133,30 +134,47 @@ object JinBoServer {
    */
   fun request(liftId: String, req: JinBoReq): JinBoResp {
     val lift = mustGetLift(liftId)
-    synchronized(lift) {
-      if (lift.emc) {
-        return JinBoResp("409", EMERGENCY_STOP_MSG)
-      }
-      val invalidCode = req.doorCodes.firstOrNull { code -> lift.doors.none { it.code == code } }
-      if (invalidCode != null) {
-        return JinBoResp("400", "$liftId 电梯不存在门号 $invalidCode")
-      }
-      val resolvedReq = JinBoDoorService.resolveDoorCodes(req)
-      if (req.destFloor == lift.curFloor) {
-        // 同层呼梯也先进入请求队列；只有目标门真正打开后才算完成并清理。
-        if (lift.reqs.none { it == resolvedReq }) {
-          lift.reqs.add(resolvedReq)
+    val reqJson = JsonHelper.writeValueAsString(req)
+    JinBoLogService.logEvent(
+      liftId,
+      LiftEvent("request-start", "hash=${req.hashCode()}, req=$reqJson"),
+    )
+    val response = try {
+      synchronized(lift) {
+        if (lift.emc) {
+          JinBoResp("409", EMERGENCY_STOP_MSG)
+        } else {
+          val invalidCode = req.doorCodes.firstOrNull { code -> lift.doors.none { it.code == code } }
+          if (invalidCode != null) {
+            JinBoResp("400", "$liftId 电梯不存在门号 $invalidCode")
+          } else {
+            val resolvedReq = JinBoDoorService.resolveDoorCodes(req)
+            if (lift.reqs.none { it == resolvedReq }) {
+              lift.reqs.add(resolvedReq)
+            }
+            if (req.destFloor == lift.curFloor && matchesTravelDirection(lift, resolvedReq)) {
+              // 同层呼梯也先进入请求队列；只有目标门真正打开后才算完成并清理。
+              JinBoDoorService.refreshSameFloorTimer(lift, resolvedReq.doorCodes)
+            }
+            JinBoResp()
+          }
         }
-        if (matchesTravelDirection(lift, resolvedReq)) {
-          JinBoDoorService.refreshSameFloorTimer(lift, resolvedReq.doorCodes)
-        }
-        return JinBoResp()
       }
-      if (lift.reqs.none { it == resolvedReq }) {
-        lift.reqs.add(resolvedReq)
-      }
+    } catch (e: Exception) {
+      JinBoLogService.logEvent(
+        liftId,
+        LiftEvent("request-failed", "hash=${req.hashCode()}, req=$reqJson, error=${e.message}"),
+      )
+      throw e
     }
-    return JinBoResp()
+    JinBoLogService.logEvent(
+      liftId,
+      LiftEvent(
+        "request-complete",
+        "hash=${req.hashCode()}, req=$reqJson, resp=${JsonHelper.writeValueAsString(response)}",
+      ),
+    )
+    return response
   }
 
   /** 独立开门指令：打开指定门，空列表表示打开默认 0 号门。 */
@@ -228,11 +246,7 @@ object JinBoServer {
   fun toggleEmergencyStop(liftId: String): JinBoResp {
     val lr = mustGetLift(liftId)
     synchronized(lr) {
-      return if (lr.emc) {
-        releaseEmergencyStop(liftId)
-      } else {
-        emergencyStop(liftId)
-      }
+      return if (lr.emc) releaseEmergencyStop(liftId) else emergencyStop(liftId)
     }
   }
 
