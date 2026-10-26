@@ -4,6 +4,7 @@ import org.dao.device.common.JsonHelper
 import org.slf4j.LoggerFactory
 import java.util.concurrent.ConcurrentHashMap
 import java.util.concurrent.CopyOnWriteArrayList
+import java.util.concurrent.Executors
 
 /**
  * 回放录制器
@@ -19,6 +20,7 @@ import java.util.concurrent.CopyOnWriteArrayList
 object JinBoRecorder {
   // 绑定 log4j2 中 name="REPLAY" 的 logger（写 logs/replay.log）
   private val replayLog = LoggerFactory.getLogger("REPLAY")
+  private val executor = Executors.newSingleThreadExecutor()
 
   // liftId -> 待归帧的事件日志行
   private val logBuf: MutableMap<String, MutableList<String>> = ConcurrentHashMap()
@@ -34,23 +36,25 @@ object JinBoRecorder {
     logBuf.getOrPut(liftId) { CopyOnWriteArrayList() }.add(line)
   }
 
+  fun dispose() {
+    executor.shutdown()
+  }
+
   /**
    * 采集一帧。必须在 synchronized(lr) 内调用（processLift 已满足）。
    * 急停状态也应录制，故调用点需放在 emc 提前返回之前。
    */
   fun capture(lr: JinBoRuntime) {
     val liftId = lr.config.id
-    val logs = logBuf.remove(liftId).orEmpty().toList()
     val reqs = lr.reqs.toList()
     val doors = lr.doors.map { it.copy() }
+    val logs = logBuf.remove(liftId).orEmpty().toList()
 
-    // 去重指纹：仅可视相关字段。用结构化快照 + == 比较（复用 JinBoReq 的 data class 结构相等），
-    // 避免字符串拼接的分配开销与拼接歧义。
+    // 在采集线程完成归帧、去重和时间戳，避免异步队列把日志挂到错误的帧。
     val snapshot = Snapshot(
       curFloor = lr.curFloor,
       h = lr.h,
       liftStatus = lr.liftStatus,
-      doorStatus = aggregateDoorStatus(doors),
       emergencyStopped = lr.emc,
       reqs = reqs,
       doors = doors,
@@ -63,37 +67,22 @@ object JinBoRecorder {
     val frame = JinBoFrame(
       liftId = liftId,
       ts = System.currentTimeMillis(),
-      curFloor = lr.curFloor,
-      h = lr.h,
-      liftStatus = lr.liftStatus,
-      doorStatus = aggregateDoorStatus(doors),
-      emergencyStopped = lr.emc,
-      reqs = reqs,
+      curFloor = snapshot.curFloor,
+      h = snapshot.h,
+      liftStatus = snapshot.liftStatus,
+      doorStatus = aggregateDoorStatus(snapshot.doors),
+      emergencyStopped = snapshot.emergencyStopped,
+      reqs = snapshot.reqs,
       logs = logs,
-      doors = doors,
+      doors = snapshot.doors,
     )
-    replayLog.info(JsonHelper.mapper.writeValueAsString(frame))
+    // 仅把可能阻塞的序列化和日志写盘移出电梯锁与仿真线程。
+    executor.execute {
+      replayLog.info(JsonHelper.mapper.writeValueAsString(frame))
+    }
   }
 
   /** 兼容旧帧字段：状态不一致时优先保留异常和门动作。 */
   private fun aggregateDoorStatus(doors: List<JinBoDoor>): JinBoDoorStatus =
-    doors.minByOrNull(::displayPriority)?.status ?: JinBoDoorStatus.CLOSE
-
-  private fun displayPriority(door: JinBoDoor): Int = when (door.status) {
-    JinBoDoorStatus.ERROR -> 0
-    JinBoDoorStatus.OPENING, JinBoDoorStatus.CLOSING -> 1
-    JinBoDoorStatus.OPEN -> 2
-    JinBoDoorStatus.CLOSE -> 3
-  }
-
-  /** 去重快照：可视相关字段，用于判断相邻帧是否发生可见变化 */
-  private data class Snapshot(
-    val curFloor: Int,
-    val h: Double,
-    val liftStatus: JinBoLiftStatus,
-    val doorStatus: JinBoDoorStatus,
-    val emergencyStopped: Boolean,
-    val reqs: List<JinBoReq>,
-    val doors: List<JinBoDoor>,
-  )
+    doors.minByOrNull { it.status.displayPriority }?.status ?: JinBoDoorStatus.CLOSE
 }

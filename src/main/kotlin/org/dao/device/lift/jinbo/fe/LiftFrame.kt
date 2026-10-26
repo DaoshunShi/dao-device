@@ -76,8 +76,11 @@ class LiftFrame(val config: JinBoConfig) : JFrame("JinBo Lift Monitor"), GuiEven
       BorderLayout.CENTER,
     )
 
-    eventLogPanel = LiftEventLogPanel(configId = config.id, onShowLiftStatusChanged = { showLiftStatus = it })
-    replayPanel = LiftReplayPanel(config = config, parentWindow = { this }, logPanel = eventLogPanel)
+    eventLogPanel = LiftEventLogPanel(
+      configId = config.id,
+      onShowLiftStatusChanged = { showLiftStatus = it },
+    )
+    replayPanel = LiftReplayPanel(config = config, parentWindow = { this })
     eventLogPanel.attachReplayPanel(replayPanel)
     add(eventLogPanel, BorderLayout.SOUTH)
   }
@@ -85,7 +88,7 @@ class LiftFrame(val config: JinBoConfig) : JFrame("JinBo Lift Monitor"), GuiEven
   private fun setupScheduler() {
     Timer(JinBoConstants.SIMULATION_INTERVAL_MS.toInt()) {
       // 回放模式下暂停实时拉取，界面由 replayer 驱动
-      if (replayPanel.isReplaying) return@Timer
+      if (JinBoEventBus.isReplayMode(config.id)) return@Timer
       val str = JinBoFetcher.fetch(config.id)
       // TODO 开关
       if (showLiftStatus) {
@@ -97,6 +100,7 @@ class LiftFrame(val config: JinBoConfig) : JFrame("JinBo Lift Monitor"), GuiEven
   fun logEvent(event: LiftEvent) {
     // 仿真核心和 HTTP 请求不应依赖 Swing 是否可用；没有显示窗口时不构造 GUI。
     if (!isDisplayable) return
+    if (JinBoEventBus.isReplayMode(config.id)) return
 
     eventLogPanel.appendLog(event)
   }

@@ -53,6 +53,7 @@ object JinBoServer {
   fun dispose() {
     lifts.values.forEach { it.dispose() }
     worker?.cancel(true)
+    JinBoRecorder.dispose()
   }
 
   fun disposeLift(liftId: String) {
@@ -92,6 +93,7 @@ object JinBoServer {
       // 按高度和已启用楼层定位当前层，避免外部刚更新 curFloor/h 时仍用旧楼层做到站判定。
       JinBoMoveService.syncCurrentFloor(lr)
       if (lr.emc) {
+        JinBoStateService.publish(lr)
         // 急停期间也录制一帧，保证时间轴连续
         JinBoLogService.captureFrame(lr)
         return
@@ -120,6 +122,8 @@ object JinBoServer {
 
       JinBoMoveService.arrive(lr)
 
+      // 在同一个 tick 内取出状态和请求快照，避免界面线程再次获取电梯锁。
+      JinBoStateService.publish(lr)
       // 录制本 tick 的状态快照
       JinBoLogService.captureFrame(lr)
     }
@@ -255,8 +259,17 @@ object JinBoServer {
    */
   fun status(liftId: String): JinBoStatusResp {
     val lift = mustGetLift(liftId)
-    synchronized(lift) {
-      return JinBoStatusResp.of(lift)
+    return synchronized(lift) {
+      JinBoStatusResp(
+        currentFloor = lift.curFloor.toString(),
+        doorStatus = lift.doors.firstOrNull { it.status != JinBoDoorStatus.CLOSE }?.status
+          ?: JinBoDoorStatus.CLOSE,
+        emergencyStopped = lift.emc,
+        doors = lift.doors.map { JinBoDoorResp(it.code, it.status.openStatus) },
+        destFloor = lift.targetFloor,
+        disabled = lift.config.disabled,
+        fault = lift.emc,
+      )
     }
   }
 

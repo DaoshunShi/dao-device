@@ -1,6 +1,5 @@
 package org.dao.device.lift.jinbo
 
-import com.fasterxml.jackson.annotation.JsonIgnore
 import java.awt.Color
 import java.util.Date
 
@@ -74,12 +73,13 @@ enum class JinBoLiftStatus {
 enum class JinBoDoorStatus(
   val openStatus: Int,
   val displayColor: Color,
+  val displayPriority: Int,
 ) {
-  OPEN(openStatus = 1, displayColor = Color.GREEN),
-  OPENING(openStatus = 3, displayColor = Color.LIGHT_GRAY),
-  CLOSE(openStatus = 2, displayColor = Color.ORANGE),
-  CLOSING(openStatus = 4, displayColor = Color.YELLOW),
-  ERROR(openStatus = 0, displayColor = Color.DARK_GRAY),
+  ERROR(openStatus = 0, displayColor = Color.DARK_GRAY, displayPriority = 0),
+  OPENING(openStatus = 3, displayColor = Color.LIGHT_GRAY, displayPriority = 1),
+  CLOSING(openStatus = 4, displayColor = Color.YELLOW, displayPriority = 1),
+  OPEN(openStatus = 1, displayColor = Color.GREEN, displayPriority = 2),
+  CLOSE(openStatus = 2, displayColor = Color.ORANGE, displayPriority = 3),
 }
 
 // -----------------------------------------------------------------------------
@@ -98,7 +98,6 @@ data class JinBoReq(
   val destFloor: Int, // 目标楼层
   val source: JinBoReqSource = JinBoReqSource.Tcp, // 请求来源
   val type: JinBoLiftStatus? = null, // 上行/下行 [仅用于外部请求]
-  @get:JsonIgnore
   val doorCodes: List<Int> = emptyList(), // 本次停靠需要打开的门号；空表示默认 0 号门
 )
 
@@ -209,6 +208,16 @@ data class JinBoFrame(
   val doors: List<JinBoDoor> = emptyList(), // 多门快照；旧回放帧缺失该字段时为空
 )
 
+/** 录制去重使用的可视状态快照；不包含采集时间和本帧日志。 */
+data class Snapshot(
+  val curFloor: Int,
+  val h: Double,
+  val liftStatus: JinBoLiftStatus,
+  val emergencyStopped: Boolean,
+  val reqs: List<JinBoReq>,
+  val doors: List<JinBoDoor>,
+)
+
 // -----------------------------------------------------------------------------
 // 外部协议响应
 // -----------------------------------------------------------------------------
@@ -231,23 +240,7 @@ data class JinBoStatusResp(
   val people: Int = 0,
   val code: String = "0", // 兼容旧响应字段
   val msg: String = "noError", // 兼容旧响应字段
-) {
-  companion object {
-    fun of(runtime: JinBoRuntime): JinBoStatusResp {
-      val doorStatus = runtime.doors.firstOrNull { it.status != JinBoDoorStatus.CLOSE }?.status
-        ?: JinBoDoorStatus.CLOSE
-      return JinBoStatusResp(
-        currentFloor = runtime.curFloor.toString(),
-        doorStatus = doorStatus,
-        emergencyStopped = runtime.emc,
-        doors = runtime.doors.map { JinBoDoorResp(it.code, it.status.openStatus) },
-        destFloor = runtime.targetFloor,
-        disabled = runtime.config.disabled,
-        fault = runtime.emc,
-      )
-    }
-  }
-}
+)
 
 /** 外部查询协议中的门状态：0=未启用，1=已开门，2=已关门，3=开门中，4=关门中。 */
 data class JinBoDoorResp(val code: Int, val openStatus: Int)
