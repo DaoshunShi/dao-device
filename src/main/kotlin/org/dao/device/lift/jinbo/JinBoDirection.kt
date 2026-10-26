@@ -7,7 +7,7 @@ package org.dao.device.lift.jinbo
  * 仍允许服务，避免端点呼梯永久留在队列中。
  */
 object JinBoDirection {
-  /** 判断呼梯是否允许作为指定运行方向上的停靠。 */
+  /** 判断呼梯是否属于指定运行方向的后续任务。 */
   fun requestMatches(req: JinBoReq, direction: JinBoLiftStatus): Boolean =
     req.source != JinBoReqSource.OutDoor ||
       req.type == null ||
@@ -16,9 +16,10 @@ object JinBoDirection {
   /** 判断电梯以 [arrivalDirection] 到达目标楼层时，能否服务该呼梯。 */
   fun arrivalMatches(config: JinBoConfig, req: JinBoReq, arrivalDirection: JinBoLiftStatus): Boolean {
     if (req.source != JinBoReqSource.OutDoor || req.type == null) return true
+    // 顶层向下、底层向上的呼梯是离开端点的请求，可在到达时反向服务。
     return when (req.type) {
-      JinBoLiftStatus.Down -> arrivalDirection != JinBoLiftStatus.Up || isTopFloor(config, req.destFloor)
-      JinBoLiftStatus.Up -> arrivalDirection != JinBoLiftStatus.Down || isBottomFloor(config, req.destFloor)
+      JinBoLiftStatus.Down -> arrivalDirection == JinBoLiftStatus.Down || isTopFloor(config, req.destFloor)
+      JinBoLiftStatus.Up -> arrivalDirection == JinBoLiftStatus.Up || isBottomFloor(config, req.destFloor)
       JinBoLiftStatus.Idle -> true
     }
   }
