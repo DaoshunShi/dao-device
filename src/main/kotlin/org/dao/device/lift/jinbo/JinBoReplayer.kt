@@ -23,13 +23,35 @@ class JinBoReplayer(private val liftId: String) {
     private const val LOG_DIR = "logs"
     private const val BASE_STEP_MS = 500L // 每帧推进的虚拟时间
 
-    /** 列出 logs 目录下所有回放文件名（replay.log 及轮转文件），按名称排序 */
-    fun listReplayFiles(): List<String> {
-      val dir = File(LOG_DIR)
-      return dir.listFiles { _, name ->
-        name == "replay.log" || (name.startsWith("replay-") && name.endsWith(".log"))
-      }?.map { it.name }?.sorted() ?: emptyList()
+    /**
+     * 列出包含指定电梯帧的回放文件，按最后修改时间升序；新文件排在最后。
+     * 回放文件可能由多台电梯共用，不能仅凭文件名判断是否有当前电梯的数据。
+     */
+    fun listReplayFiles(liftId: String): List<String> {
+      return replayFiles(File(LOG_DIR))
+        .filter { file -> file.containsFrameFor(liftId) }
+        .sortedBy { it.lastModified() }
+        .map { it.name }
     }
+
+    private fun replayFiles(dir: File): List<File> = dir.listFiles { file ->
+      file.isFile && file.name.isReplayFileName()
+    }?.toList().orEmpty()
+
+    private fun File.containsFrameFor(liftId: String): Boolean =
+      useLines { lines ->
+        lines.any { line ->
+          if (line.isBlank()) return@any false
+          try {
+            JsonHelper.mapper.readTree(line)["liftId"].asText() == liftId
+          } catch (_: Exception) {
+            false
+          }
+        }
+      }
+
+    private fun String.isReplayFileName(): Boolean =
+      this == "replay.log" || (startsWith("replay-") && endsWith(".log"))
   }
 
   private var frames: List<JinBoFrame> = emptyList()
@@ -61,19 +83,13 @@ class JinBoReplayer(private val liftId: String) {
     return if (i < 0) 0 else i
   }
 
-  /**
-   * 从磁盘加载并解析属于 liftId 的帧，重置到第一帧。
-   * @param fileName 指定回放文件名；为 null 时加载全部回放文件。
-   * @return 加载到的帧数
-   */
+  /** 从磁盘加载属于 liftId 的帧；只负责装载，不向界面渲染。 */
   fun load(fileName: String? = null): Int {
-    val dir = File(LOG_DIR)
+    val logDir = File(LOG_DIR)
     val files = if (fileName != null) {
-      listOf(File(dir, fileName)).filter { it.exists() }
+      listOf(File(logDir, fileName)).filter { it.exists() }
     } else {
-      dir.listFiles { _, name ->
-        name == "replay.log" || (name.startsWith("replay-") && name.endsWith(".log"))
-      }?.sortedBy { it.name } ?: emptyList()
+      replayFiles(logDir).sortedBy { it.name }
     }
 
     val parsed = mutableListOf<JinBoFrame>()
@@ -91,6 +107,7 @@ class JinBoReplayer(private val liftId: String) {
 
     frames = parsed.sortedBy { it.ts }
     clockTs = firstTs
+    speed = 1
     return frames.size
   }
 

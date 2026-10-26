@@ -18,7 +18,8 @@ class JinBoReplayService(private val liftId: String) {
 
   var onFrameChanged: ((frames: List<JinBoFrame>, index: Int, clockTs: Long) -> Unit)? = null
 
-  fun listFiles(): List<String> = JinBoReplayer.listReplayFiles()
+  /** 只返回包含当前电梯帧的回放文件，避免选中后得到空画面。 */
+  fun listFiles(): List<String> = JinBoReplayer.listReplayFiles(liftId)
 
   /** 开回放并加载首帧；没有记录时返回 false，由界面负责提示。 */
   fun open(fileName: String? = null): Boolean {
@@ -98,5 +99,4 @@ class JinBoReplayService(private val liftId: String) {
     }
     if (SwingUtilities.isEventDispatchThread()) run.run() else SwingUtilities.invokeLater(run)
   }
-
 }
