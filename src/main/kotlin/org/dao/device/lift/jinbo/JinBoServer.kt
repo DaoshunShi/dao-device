@@ -260,6 +260,17 @@ object JinBoServer {
     }
   }
 
+  /** 清空所有呼梯请求；电梯仍会完成已开始的行程，避免停在楼层之间。 */
+  fun resetRequests(liftId: String): JinBoResp {
+    val lift = mustGetLift(liftId)
+    synchronized(lift) {
+      lift.reqs.clear()
+    }
+    JinBoBtnService.clearRequests(liftId)
+    JinBoLogService.logEvent(liftId, LiftEvent("重置", "$liftId 已清空所有呼梯请求"))
+    return JinBoResp()
+  }
+
   /**
    * 获取电梯信息
    */

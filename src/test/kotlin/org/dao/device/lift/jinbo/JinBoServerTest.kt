@@ -496,6 +496,30 @@ class JinBoServerTest {
   }
 
   @Test
+  fun `reset clears calls and their highlights without clearing door control buttons`() {
+    val runtime = newRuntime(doorCount = 2, initialFloor = 2)
+
+    withLift(runtime) {
+      try {
+        JinBoServer.request(LIFT_ID, JinBoReq(3, JinBoReqSource.Tcp, doorCodes = listOf(0, 1)))
+        JinBoBtnService.pressInDoor(LIFT_ID, 3)
+        JinBoBtnService.pressClose(LIFT_ID, fromTcp = true)
+        assertTrue(runtime.reqs.isNotEmpty())
+        assertTrue(JinBoBtnService.buttons(LIFT_ID).any { it.action == "关门" })
+
+        assertEquals("0", JinBoServer.resetRequests(LIFT_ID).code)
+
+        assertTrue(runtime.reqs.isEmpty())
+        assertTrue(JinBoBtnService.requests(LIFT_ID).isEmpty())
+        assertFalse(JinBoBtnService.buttons(LIFT_ID).any { it.action == "呼梯" })
+        assertTrue(JinBoBtnService.buttons(LIFT_ID).any { it.action == "关门" })
+      } finally {
+        JinBoBtnService.reset(LIFT_ID)
+      }
+    }
+  }
+
+  @Test
   fun `initial floor uses configured floor`() {
     val runtime = newRuntime(initialFloor = 2)
 

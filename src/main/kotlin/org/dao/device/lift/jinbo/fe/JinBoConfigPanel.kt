@@ -42,6 +42,12 @@ class JinBoConfigPanel(val config: JinBoConfig) :
     }
     add(emergencyStopButton)
 
+    add(
+      JButton("重置").apply {
+        addActionListener { JinBoServer.resetRequests(config.id) }
+      },
+    )
+
     val titleLabel = JLabel("电梯配置")
     add(titleLabel)
 
