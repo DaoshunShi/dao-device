@@ -69,28 +69,22 @@ object JinBoBtnService {
 
   /** 按仿真 tick 的请求快照刷新按钮；回放模式由回放器直接推送对应的请求事件。 */
   fun refresh(liftId: String, reqs: List<JinBoReq>) {
-    val lift = JinBoServer.lifts[liftId] ?: return
+    JinBoServer.lifts[liftId] ?: return
     val snapshot = BtnSnapshot(
       outside = reqs.filter { it.source == JinBoReqSource.OutDoor },
       inside = reqs.filter { it.source == JinBoReqSource.InDoor },
       tcp = reqs.filter { it.source == JinBoReqSource.Tcp },
     )
-    fireRequests(liftId, snapshot)
+    JinBoEventBus.fireRealtime(liftId, LiftEvent("outside", JsonHelper.mapper.writeValueAsString(snapshot.outside)))
+    JinBoEventBus.fireRealtime(liftId, LiftEvent("inside", JsonHelper.mapper.writeValueAsString(snapshot.inside)))
+    JinBoEventBus.fireRealtime(liftId, LiftEvent("tcp", JsonHelper.mapper.writeValueAsString(snapshot.tcp)))
   }
 
   fun fireRequests(liftId: String, outside: List<JinBoReq>, inside: List<JinBoReq>, tcp: List<JinBoReq>) {
-    fireRequests(liftId, BtnSnapshot(outside, inside, tcp))
+    JinBoEventBus.fireReplay(liftId, LiftEvent("outside", JsonHelper.mapper.writeValueAsString(outside)))
+    JinBoEventBus.fireReplay(liftId, LiftEvent("inside", JsonHelper.mapper.writeValueAsString(inside)))
+    JinBoEventBus.fireReplay(liftId, LiftEvent("tcp", JsonHelper.mapper.writeValueAsString(tcp)))
   }
 
-  private fun fireRequests(liftId: String, snapshot: BtnSnapshot) {
-    JinBoEventBus.fire(liftId, LiftEvent("outside", JsonHelper.mapper.writeValueAsString(snapshot.outside)))
-    JinBoEventBus.fire(liftId, LiftEvent("inside", JsonHelper.mapper.writeValueAsString(snapshot.inside)))
-    JinBoEventBus.fire(liftId, LiftEvent("tcp", JsonHelper.mapper.writeValueAsString(snapshot.tcp)))
-  }
-
-  private data class BtnSnapshot(
-    val outside: List<JinBoReq>,
-    val inside: List<JinBoReq>,
-    val tcp: List<JinBoReq>,
-  )
+  private data class BtnSnapshot(val outside: List<JinBoReq>, val inside: List<JinBoReq>, val tcp: List<JinBoReq>)
 }
