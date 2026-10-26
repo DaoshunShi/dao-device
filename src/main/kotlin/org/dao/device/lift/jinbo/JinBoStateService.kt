@@ -12,6 +12,8 @@ object JinBoStateService {
     if (JinBoEventBus.isReplayMode(lift.config.id)) return
     val reqs = lift.reqs.toList()
     val snapshot = LiftState.capture(lift)
+    JinBoBtnService.release(lift.config.id, reqs, snapshot.doors)
+    val buttons = JinBoBtnService.buttons(lift.config.id)
     fire(
       liftId = lift.config.id,
       h = snapshot.h,
@@ -20,7 +22,7 @@ object JinBoStateService {
       doors = snapshot.doors,
       emergencyStopped = snapshot.emergencyStopped,
     )
-    JinBoBtnService.refresh(lift.config.id, reqs)
+    JinBoBtnService.refresh(lift.config.id, reqs, buttons)
   }
 
   fun fireState(liftId: String, frame: JinBoFrame) {

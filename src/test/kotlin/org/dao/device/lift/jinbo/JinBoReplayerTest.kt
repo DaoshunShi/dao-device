@@ -138,11 +138,11 @@ class JinBoReplayerTest {
       liftStatus = JinBoLiftStatus.Up,
       doorStatus = JinBoDoorStatus.OPEN,
       emergencyStopped = false,
-      reqs = listOf(
-        JinBoReq(3, JinBoReqSource.OutDoor, JinBoLiftStatus.Up, listOf(0)),
-        JinBoReq(4, JinBoReqSource.InDoor, doorCodes = listOf(1)),
-        JinBoReq(5, JinBoReqSource.Tcp, doorCodes = listOf(0)),
-      ),
+      reqs = JinBoRequestEntries(listOf(
+        JinBoRequestEntry(JinBoReq(3, JinBoReqSource.OutDoor, JinBoLiftStatus.Up, listOf(0)), 900L),
+        JinBoRequestEntry(JinBoReq(4, JinBoReqSource.InDoor, doorCodes = listOf(1)), 950L),
+        JinBoRequestEntry(JinBoReq(5, JinBoReqSource.Tcp, doorCodes = listOf(0)), 975L),
+      )),
       logs = listOf("request-start:test"),
       doors = listOf(JinBoDoor(0, JinBoDoorStatus.OPEN), JinBoDoor(1, JinBoDoorStatus.CLOSE)),
     )
@@ -163,13 +163,65 @@ class JinBoReplayerTest {
 
         assertEquals(listOf(0 to 1_000L), rendered)
         assertEquals(
-          listOf("liftState", "outside", "inside", "tcp"),
+          listOf("liftState", "outside", "inside", "tcp", "reqs"),
           events.map { it.topic },
         )
         val state = JsonHelper.mapper.readValue(events[0].msg, Map::class.java)
         assertEquals(3.0, (state["h"] as Number).toDouble())
         assertEquals("Up", state["liftStatus"])
         assertEquals(2, (state["doors"] as List<*>).size)
+        val entries: List<JinBoRequestEntry> = JsonHelper.mapper.readValue(
+          events[4].msg,
+          com.fasterxml.jackson.module.kotlin.jacksonTypeRef(),
+        )
+        assertEquals(listOf(900L, 950L, 975L), entries.map { it.queuedAt })
+      } finally {
+        replay.close()
+        JinBoEventBus.listener[LIFT_ID]?.remove(listener)
+      }
+    }
+  }
+
+  @Test
+  fun `replay restores button state independently from request queue`() {
+    val frame = JinBoFrame(
+      liftId = LIFT_ID,
+      ts = 1_000L,
+      curFloor = 2,
+      h = 3.0,
+      liftStatus = JinBoLiftStatus.Idle,
+      doorStatus = JinBoDoorStatus.OPEN,
+      emergencyStopped = false,
+      buttons = listOf(
+        JinBoButton("LiftInsidePanel", 2, null, "呼梯", 900L),
+        JinBoButton("LiftInsidePanel", null, null, "关门", 950L),
+      ),
+      reqs = JinBoRequestEntries(listOf(JinBoRequestEntry(JinBoReq(5, JinBoReqSource.Tcp), 975L))),
+      logs = emptyList(),
+    )
+    withReplayFile(FILE_NAME, fileNamePattern = "replay-replayer-test.log", frames = listOf(frame)) {
+      val events = mutableListOf<LiftEvent>()
+      val listener = object : org.dao.device.common.GuiEventListener {
+        override fun onEvent(event: LiftEvent) {
+          if (event.topic in setOf("inside", "reqs")) events.add(event)
+        }
+      }
+      JinBoEventBus.register(LIFT_ID, listener)
+      val replay = JinBoReplayService(LIFT_ID)
+      try {
+        replay.openFile("replay-replayer-test.log")
+        SwingUtilities.invokeAndWait { }
+
+        val inside: List<JinBoReq> = JsonHelper.mapper.readValue(
+          events.single { it.topic == "inside" }.msg,
+          com.fasterxml.jackson.module.kotlin.jacksonTypeRef(),
+        )
+        val reqs: List<JinBoRequestEntry> = JsonHelper.mapper.readValue(
+          events.single { it.topic == "reqs" }.msg,
+          com.fasterxml.jackson.module.kotlin.jacksonTypeRef(),
+        )
+        assertEquals(listOf(2), inside.map { it.destFloor })
+        assertEquals(listOf(5), reqs.map { it.req.destFloor })
       } finally {
         replay.close()
         JinBoEventBus.listener[LIFT_ID]?.remove(listener)
@@ -231,7 +283,7 @@ class JinBoReplayerTest {
       liftStatus = JinBoLiftStatus.Down,
       doorStatus = JinBoDoorStatus.OPEN,
       emergencyStopped = false,
-      reqs = emptyList(),
+      reqs = JinBoRequestEntries(),
       logs = listOf("replay-log"),
     )
     withReplayFile(FILE_NAME, frames = listOf(replayFrame), fileNamePattern = "replay-replayer-test.log") {
@@ -282,7 +334,7 @@ class JinBoReplayerTest {
       liftStatus = JinBoLiftStatus.Down,
       doorStatus = JinBoDoorStatus.OPEN,
       emergencyStopped = false,
-      reqs = emptyList(),
+      reqs = JinBoRequestEntries(),
       logs = emptyList(),
     )
     withReplayFile(FILE_NAME, frames = listOf(replayFrame), fileNamePattern = "replay-replayer-test.log") {
@@ -329,6 +381,17 @@ class JinBoReplayerTest {
     assertEquals(JinBoLiftStatus.Down, frame.direction)
   }
 
+  @Test
+  fun `old replay requests are restored without a fake queued time`() {
+    val frame = JsonHelper.mapper.readValue(
+      """{"liftId":"$LIFT_ID","ts":1000,"curFloor":2,"h":3.0,"liftStatus":"Idle","doorStatus":"OPEN","emergencyStopped":false,"reqs":[{"destFloor":5,"source":"Tcp","doorCodes":[]}],"logs":[]}""",
+      JinBoFrame::class.java,
+    )
+
+    assertEquals(listOf(JinBoReq(5, JinBoReqSource.Tcp)), frame.reqs.map { it.req })
+    assertEquals(listOf(0L), frame.reqs.map { it.queuedAt })
+  }
+
   private fun withReplayFile(
     fileName: String,
     timestamps: List<Long> = emptyList(),
@@ -342,7 +405,7 @@ class JinBoReplayerTest {
         liftStatus = JinBoLiftStatus.Idle,
         doorStatus = JinBoDoorStatus.CLOSE,
         emergencyStopped = false,
-        reqs = emptyList(),
+        reqs = JinBoRequestEntries(),
         logs = emptyList(),
       )
     },

@@ -69,6 +69,7 @@ data class JinBoRuntime(
   }
 
   fun dispose() {
+    JinBoBtnService.reset(config.id)
     tcpServer?.shutdown()
     tcpServer = null
 

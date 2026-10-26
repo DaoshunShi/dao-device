@@ -85,12 +85,7 @@ class JinBoReplayService(private val liftId: String) {
     val render = Runnable {
       if (generation != expectedGeneration) return@Runnable
       JinBoStateService.fireState(liftId, frame)
-      JinBoBtnService.fireRequests(
-        liftId,
-        outside = frame.reqs.filter { it.source == JinBoReqSource.OutDoor },
-        inside = frame.reqs.filter { it.source == JinBoReqSource.InDoor },
-        tcp = frame.reqs.filter { it.source == JinBoReqSource.Tcp },
-      )
+      JinBoBtnService.fireFrame(liftId, frame)
       JinBoLogService.renderReplayLogs(liftId, frames, index)
       onFrameChanged?.invoke(frames, index, clockTs)
     }

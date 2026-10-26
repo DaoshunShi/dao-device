@@ -38,7 +38,7 @@ class LiftFrame(val config: JinBoConfig) : JFrame("JinBo Lift Monitor"), GuiEven
 
   init {
     defaultCloseOperation = DISPOSE_ON_CLOSE
-    setSize(1000, 700)
+    setSize(1200, 700)
 
     setupUi()
     setupScheduler()
@@ -55,7 +55,7 @@ class LiftFrame(val config: JinBoConfig) : JFrame("JinBo Lift Monitor"), GuiEven
     add(JinBoConfigPanel(config), BorderLayout.NORTH)
 
     val mainPanel = JPanel().apply {
-      layout = GridLayout(1, 4, 5, 10)
+      layout = GridLayout(1, 5, 5, 10)
       background = Color.LIGHT_GRAY
       border = BorderFactory.createEmptyBorder(5, 0, 0, 0)
     }
@@ -64,10 +64,12 @@ class LiftFrame(val config: JinBoConfig) : JFrame("JinBo Lift Monitor"), GuiEven
     val cpCenter = createLiftPanel("当前位置", Color.WHITE, LiftPositionPanel(config))
     val cpRight = createLiftPanel("梯内", Color.ORANGE, LiftInsidePanel(config))
     val cpRight2 = createLiftPanel("TCP", Color.GREEN, LiftTcpPanel(config))
+    val cpRight3 = createLiftPanel("reqs", Color.CYAN, LiftReqsPanel(config))
     mainPanel.add(cpLeft)
     mainPanel.add(cpCenter)
     mainPanel.add(cpRight)
     mainPanel.add(cpRight2)
+    mainPanel.add(cpRight3)
     add(
       JPanel(BorderLayout()).apply {
         add(emergencyBanner, BorderLayout.NORTH)

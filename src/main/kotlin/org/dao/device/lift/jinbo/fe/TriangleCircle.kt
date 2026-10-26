@@ -43,15 +43,12 @@ class TriangleCircle(
     addMouseListener(object : MouseAdapter() {
       override fun mouseClicked(e: MouseEvent) {
         println("Clicked on TriangleCircle")
-        active = !active
 
         JinBoBtnService.pressOutDoor(
           config.id,
           floorIdx,
           if (up) JinBoLiftStatus.Up else JinBoLiftStatus.Down,
         )
-
-        repaint()
       }
     })
 

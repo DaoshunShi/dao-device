@@ -1,7 +1,7 @@
 package org.dao.device.lift.jinbo.fe
 
-import org.dao.device.lift.jinbo.JinBoConfig
 import org.dao.device.lift.jinbo.JinBoBtnService
+import org.dao.device.lift.jinbo.JinBoConfig
 import java.awt.BorderLayout
 import java.awt.GridLayout
 import javax.swing.JButton
@@ -16,7 +16,6 @@ class LiftTcpPanel(config: JinBoConfig) : JPanel() {
       .filter { !it.disabled }
       .sortedByDescending { it.index }
 
-    // 动态设置网格布局：启用的楼层数 + 2（预留空间） x 1
     layout = GridLayout(enabledFloors.size + 2, 1, 0, 5)
 
     for (floor in enabledFloors) {

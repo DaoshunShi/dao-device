@@ -34,11 +34,8 @@ class LabelCircle2(config: JinBoConfig, val floorIdx: Int, val labelStr: String,
     addMouseListener(object : MouseAdapter() {
       override fun mouseClicked(e: MouseEvent) {
         println("Clicked on LabelCircle")
-        active = !active
 
-        JinBoBtnService.press(config.id, JinBoReq(floorIdx), fromPanel = true)
-
-        repaint()
+        JinBoBtnService.pressButton(config.id, JinBoReq(floorIdx))
       }
     })
 

@@ -74,6 +74,52 @@ class JinBoServerTest {
   }
 
   @Test
+  fun `button press is recorded independently from the request queue`() {
+    val runtime = newRuntime(initialFloor = 3)
+
+    withLift(runtime) {
+      try {
+        val req = JinBoReq(2, JinBoReqSource.InDoor)
+        assertEquals("0", JinBoBtnService.pressButton(LIFT_ID, req).code)
+        assertTrue(runtime.reqs.any { it.destFloor == 2 })
+        assertTrue(JinBoBtnService.buttons(LIFT_ID).single { it.floor == 2 && it.action == "呼梯" }.active)
+
+        val pressedAt = JinBoBtnService.buttons(LIFT_ID).first().pressedAt
+        val invalidReq = JinBoReq(3, JinBoReqSource.InDoor, doorCodes = listOf(9))
+        assertEquals("400", JinBoBtnService.pressButton(LIFT_ID, invalidReq).code)
+        val invalidButton = JinBoBtnService.buttons(LIFT_ID).single { it.floor == 3 }
+        assertTrue(invalidButton.pressedAt >= pressedAt)
+        assertFalse(invalidButton.active)
+        assertTrue(runtime.reqs.none { it == invalidReq })
+      } finally {
+        JinBoBtnService.reset(LIFT_ID)
+      }
+    }
+  }
+
+  @Test
+  fun `button highlight follows request consumption without matching resolved door codes`() {
+    val runtime = newRuntime(initialFloor = 3)
+
+    withLift(runtime) {
+      try {
+        JinBoBtnService.pressButton(LIFT_ID, JinBoReq(2, JinBoReqSource.InDoor))
+        val returnedReq = runtime.reqs.single()
+        assertEquals(listOf(0), returnedReq.doorCodes)
+
+        JinBoBtnService.release(LIFT_ID, runtime.reqs, runtime.doors)
+        assertTrue(JinBoBtnService.buttons(LIFT_ID).single().active)
+
+        runtime.reqs.clear()
+        JinBoBtnService.release(LIFT_ID, runtime.reqs, runtime.doors)
+        assertFalse(JinBoBtnService.buttons(LIFT_ID).single().active)
+      } finally {
+        JinBoBtnService.reset(LIFT_ID)
+      }
+    }
+  }
+
+  @Test
   fun `arrives and opens all requested doors before clearing request`() {
     val runtime = newRuntime(doorCount = 2, initialFloor = 1)
 

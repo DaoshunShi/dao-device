@@ -1,5 +1,10 @@
 package org.dao.device.lift.jinbo
 
+import com.fasterxml.jackson.core.JsonParser
+import com.fasterxml.jackson.databind.DeserializationContext
+import com.fasterxml.jackson.databind.JsonDeserializer
+import com.fasterxml.jackson.databind.JsonNode
+import com.fasterxml.jackson.databind.annotation.JsonDeserialize
 import java.awt.Color
 import java.util.Date
 
@@ -101,6 +106,38 @@ data class JinBoReq(
   val doorCodes: List<Int> = emptyList(), // 本次停靠需要打开的门号；空表示默认 0 号门
 )
 
+/** 回放中的按钮按下记录；按钮标识与请求队列相互独立，[active] 表示该按钮当前是否仍亮起。 */
+data class JinBoButton(
+  val panel: String,
+  val floor: Int?,
+  val direction: JinBoLiftStatus?,
+  val action: String,
+  val pressedAt: Long,
+  val active: Boolean = true,
+)
+
+/** 请求队列中的一项及其首次入队时间。 */
+data class JinBoRequestEntry(
+  val req: JinBoReq,
+  val queuedAt: Long,
+)
+
+/** 兼容旧回放中直接保存的 JinBoReq 列表。 */
+@JsonDeserialize(using = JinBoRequestEntriesDeserializer::class)
+class JinBoRequestEntries(private val entries: List<JinBoRequestEntry>) : List<JinBoRequestEntry> by entries {
+  constructor() : this(emptyList())
+}
+
+class JinBoRequestEntriesDeserializer : JsonDeserializer<JinBoRequestEntries>() {
+  override fun deserialize(p: JsonParser, ctxt: DeserializationContext): JinBoRequestEntries =
+    JinBoRequestEntries(
+      p.readValueAsTree<JsonNode>().map { node ->
+        if (node.has("req")) ctxt.readTreeAsValue(node, JinBoRequestEntry::class.java)
+        else JinBoRequestEntry(ctxt.readTreeAsValue(node, JinBoReq::class.java), 0L)
+      },
+    )
+}
+
 /**
  * 单个电梯门的运行状态。
  *
@@ -192,6 +229,7 @@ data class JinBoDoorConfig(
 /**
  * 回放帧：某一仿真 tick 的电梯可视状态快照 + 该帧窗口内的事件日志。
  *
+ * buttons 保存按钮按下的时间和亮灭状态，独立于请求队列；reqs 保存已成功入队的请求。
  * reqs 可还原 outside/inside/tcp 三个事件（按 source 过滤）；
  * h/liftStatus/direction/doorStatus/doors/emergencyStopped 可还原 liftState 事件。
  */
@@ -204,9 +242,10 @@ data class JinBoFrame(
   val direction: JinBoLiftStatus = liftStatus, // 旧回放帧没有方向时沿用运行状态
   val doorStatus: JinBoDoorStatus,
   val emergencyStopped: Boolean,
-  val reqs: List<JinBoReq>, // 请求快照
+  val reqs: JinBoRequestEntries, // 请求队列快照
   val logs: List<String>, // 本帧窗口内产生的事件日志行
   val doors: List<JinBoDoor> = emptyList(), // 多门快照；旧回放帧缺失该字段时为空
+  val buttons: List<JinBoButton> = emptyList(), // 按钮按下快照；旧回放帧缺失时为空
 )
 
 /** 录制去重使用的可视状态快照；不包含采集时间和本帧日志。 */
@@ -216,7 +255,8 @@ data class Snapshot(
   val liftStatus: JinBoLiftStatus,
   val direction: JinBoLiftStatus,
   val emergencyStopped: Boolean,
-  val reqs: List<JinBoReq>,
+  val buttons: List<JinBoButton>,
+  val reqs: JinBoRequestEntries,
   val doors: List<JinBoDoor>,
 )
 
