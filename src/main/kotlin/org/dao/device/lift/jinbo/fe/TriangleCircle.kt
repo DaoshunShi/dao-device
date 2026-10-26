@@ -16,7 +16,6 @@ import java.awt.Polygon
 import java.awt.RenderingHints
 import java.awt.event.MouseAdapter
 import java.awt.event.MouseEvent
-import javax.swing.JPanel
 import kotlin.math.PI
 import kotlin.math.cos
 import kotlin.math.sin
@@ -30,7 +29,7 @@ class TriangleCircle(
   val circleRadius: Int,
   val triangleSize: Int,
   val up: Boolean,
-) : JPanel(),
+) : ClickAnimatedPanel(),
   GuiEventListener {
 
   // 颜色设置
@@ -42,13 +41,13 @@ class TriangleCircle(
   init {
     addMouseListener(object : MouseAdapter() {
       override fun mouseClicked(e: MouseEvent) {
-        println("Clicked on TriangleCircle")
-
-        JinBoBtnService.pressOutDoor(
-          config.id,
-          floorIdx,
-          if (up) JinBoLiftStatus.Up else JinBoLiftStatus.Down,
+        // 按下日志必须先于请求提交打印；不能等到请求拿到电梯锁后才输出。
+        System.err.println(
+          "按钮按下: 电梯=${config.id}, 面板=LiftOutsidePanel, 楼层=$floorIdx, " +
+            "方向=${if (up) JinBoLiftStatus.Up else JinBoLiftStatus.Down}",
         )
+        val direction = if (up) JinBoLiftStatus.Up else JinBoLiftStatus.Down
+        JinBoBtnService.pressOutDoor(config.id, floorIdx, direction)
       }
     })
 
@@ -56,36 +55,39 @@ class TriangleCircle(
   }
 
   override fun paintComponent(g: Graphics) {
+    super.paintComponent(g)
     val g2d = g as Graphics2D
 
-    // 清除背景
     g2d.color = background
     g2d.fillRect(0, 0, width, height)
 
     // 启用抗锯齿
     g2d.setRenderingHint(RenderingHints.KEY_ANTIALIASING, RenderingHints.VALUE_ANTIALIAS_ON)
 
-    val centerX = width / 2
-    val centerY = height / 2
+    withPressedTransform(g2d) {
+      val centerX = width / 2
+      val centerY = height / 2
 
-    // 绘制圆圈
-    g2d.color = if (active) Color.BLUE else Color.gray
-    g2d.stroke = BasicStroke(3.0f)
-    g2d.drawOval(
-      centerX - circleRadius,
-      centerY - circleRadius,
-      circleRadius * 2,
-      circleRadius * 2,
-    )
+      // 绘制圆圈
+      g2d.color = if (active) Color.BLUE else Color.gray
+      g2d.stroke = BasicStroke(3.0f)
+      g2d.drawOval(
+        centerX - circleRadius,
+        centerY - circleRadius,
+        circleRadius * 2,
+        circleRadius * 2,
+      )
 
-    // 计算三角形顶点
-    val triangle = createTriangle(centerX, centerY, triangleSize, rotationAngle)
+      // 计算三角形顶点
+      val triangle = createTriangle(centerX, centerY, triangleSize, rotationAngle)
 
-    // 绘制三角形
-    g2d.color = if (active) Color.ORANGE else Color.DARK_GRAY
-    g2d.fillPolygon(triangle)
-    g2d.color = Color.BLACK
-    g2d.drawPolygon(triangle)
+      // 绘制三角形
+      g2d.color = if (active) Color.ORANGE else Color.DARK_GRAY
+      g2d.fillPolygon(triangle)
+      g2d.color = Color.BLACK
+      g2d.drawPolygon(triangle)
+    }
+    paintPressedOverlay(g2d)
   }
 
   /**
