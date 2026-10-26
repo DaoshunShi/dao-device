@@ -1,6 +1,7 @@
 package org.dao.device.lift.jinbo.fe
 
 import org.dao.device.common.GuiEventListener
+import org.dao.device.lift.jinbo.event.LiftEvent
 import java.util.concurrent.ConcurrentHashMap
 import java.util.concurrent.CopyOnWriteArrayList
 

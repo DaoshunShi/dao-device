@@ -2,8 +2,8 @@ package org.dao.device.lift.jinbo
 
 import com.fasterxml.jackson.module.kotlin.jacksonTypeRef
 import org.dao.device.common.JsonHelper
+import org.dao.device.lift.jinbo.event.LiftEvent
 import org.dao.device.lift.jinbo.fe.JinBoEventBus
-import org.dao.device.lift.jinbo.fe.LiftEvent
 import java.io.File
 import javax.swing.SwingUtilities
 import javax.swing.Timer

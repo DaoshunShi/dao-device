@@ -5,6 +5,7 @@ import org.dao.device.common.GuiEventListener
 import org.dao.device.common.JsonHelper
 import org.dao.device.lift.jinbo.JinBoConfig
 import org.dao.device.lift.jinbo.JinBoServer
+import org.dao.device.lift.jinbo.event.LiftEvent
 import java.awt.*
 import java.awt.event.ActionEvent
 import java.awt.event.ActionListener

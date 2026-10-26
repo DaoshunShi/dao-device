@@ -7,6 +7,7 @@ import org.dao.device.lift.jinbo.JinBoReqSource
 import org.dao.device.lift.jinbo.JinBoRuntime
 import org.dao.device.lift.jinbo.JinBoServer
 import org.dao.device.lift.jinbo.JinBoDoorStatus
+import org.dao.device.lift.jinbo.event.LiftEvent
 
 object JinBoFetcher {
   // 获取电梯运行动态

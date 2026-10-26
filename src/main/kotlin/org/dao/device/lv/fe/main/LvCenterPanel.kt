@@ -2,7 +2,7 @@ package org.dao.device.lv.fe.main
 
 import org.dao.device.common.FileHelper
 import org.dao.device.common.GuiEventListener
-import org.dao.device.lift.jinbo.fe.LiftEvent
+import org.dao.device.lift.jinbo.event.LiftEvent
 import org.dao.device.lv.LvEventBus
 import java.awt.BorderLayout
 import java.awt.Color

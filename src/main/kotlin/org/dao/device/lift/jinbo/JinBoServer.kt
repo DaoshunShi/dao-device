@@ -1,7 +1,7 @@
 package org.dao.device.lift.jinbo
 
 import org.dao.device.common.JsonHelper
-import org.dao.device.lift.jinbo.fe.LiftEvent
+import org.dao.device.lift.jinbo.event.LiftEvent
 import org.slf4j.LoggerFactory
 import java.awt.GraphicsEnvironment
 import java.util.*

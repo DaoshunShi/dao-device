@@ -10,7 +10,7 @@ import io.netty.channel.socket.nio.NioServerSocketChannel
 import io.netty.handler.codec.ByteToMessageDecoder
 import io.netty.handler.codec.MessageToByteEncoder
 import org.dao.device.common.JsonHelper
-import org.dao.device.lift.jinbo.fe.LiftEvent
+import org.dao.device.lift.jinbo.event.LiftEvent
 import org.slf4j.LoggerFactory
 import java.nio.charset.StandardCharsets
 import java.util.concurrent.atomic.AtomicBoolean

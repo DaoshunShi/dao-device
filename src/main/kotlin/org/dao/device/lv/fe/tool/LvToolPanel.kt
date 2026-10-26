@@ -1,7 +1,7 @@
 package org.dao.device.lv.fe.tool
 
 import org.dao.device.lift.jinbo.fe.JinBoEventBus
-import org.dao.device.lift.jinbo.fe.LiftEvent
+import org.dao.device.lift.jinbo.event.LiftEvent
 import java.awt.Color
 import java.awt.Graphics
 import javax.swing.BoxLayout
