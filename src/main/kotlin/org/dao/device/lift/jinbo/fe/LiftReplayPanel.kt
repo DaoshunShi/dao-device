@@ -3,7 +3,7 @@ package org.dao.device.lift.jinbo.fe
 import org.apache.commons.lang3.time.DateFormatUtils
 import org.dao.device.lift.jinbo.JinBoConfig
 import org.dao.device.lift.jinbo.JinBoFrame
-import org.dao.device.lift.jinbo.JinBoLogService
+import org.dao.device.lift.jinbo.JinBoReplayPosition
 import org.dao.device.lift.jinbo.JinBoReplayService
 import java.awt.BorderLayout
 import java.awt.Dimension
@@ -38,11 +38,13 @@ class LiftReplayPanel(
   private val replayFileCombo = JComboBox<String>()
   private var suppressComboEvent = false
   private var onReplayStateChanged: ((Boolean) -> Unit)? = null
+  private var onFrameRendered: ((List<JinBoFrame>, JinBoReplayPosition) -> Unit)? = null
   private var replayMode = false
   private var activeFile: String? = null
 
   internal val loadedFrameCount: Int get() = replayService.frameCount
   internal val timelineFrameCount: Int get() = replayTimeline.frameCount
+  internal val timelineHeight: Int get() = replayTimeline.height
 
   init {
     isVisible = false
@@ -53,7 +55,7 @@ class LiftReplayPanel(
     buildControlRow()
   }
 
-  /** 打开/关闭回放模式：打开时加载并停在首帧，关闭时释放回放器并清空日志。 */
+  /** 打开/关闭回放模式：打开时加载并停在首帧，关闭时恢复实时日志视图。 */
   fun setReplayEnabled(on: Boolean) {
     if (on) {
       if (replayMode) return
@@ -85,11 +87,13 @@ class LiftReplayPanel(
       activeFile = defaultFile
       replayMode = true
       isVisible = true
+      onFrameRendered?.invoke(replayService.allFrames, replayService.currentPosition)
       revalidate()
+      doLayout()
+      repaint()
       onReplayStateChanged?.invoke(true)
     } else {
       deactivate()
-      JinBoLogService.clearDisplay(config.id)
       revalidate()
     }
   }
@@ -117,6 +121,10 @@ class LiftReplayPanel(
   /** 通知开关和窗口回放模式状态，避免控件与实际数据源不一致。 */
   fun onReplayStateChanged(callback: (Boolean) -> Unit) {
     onReplayStateChanged = callback
+  }
+
+  fun onFrameRendered(callback: (frames: List<JinBoFrame>, position: JinBoReplayPosition) -> Unit) {
+    onFrameRendered = callback
   }
 
   /**
@@ -189,6 +197,7 @@ class LiftReplayPanel(
     playPauseBtn.text = "▶ 播放"
     replayTimeline.isEnabled = true
     replayTimeline.setFrames(replayService.allFrames)
+    replayService.seekFirstFrame()
     return true
   }
 
@@ -227,6 +236,7 @@ class LiftReplayPanel(
     }
     replayTimeLabel.text = DateFormatUtils.format(Date(clockTs), "HH:mm:ss")
     replayTimeline.setCurrent(clockTs)
+    onFrameRendered?.invoke(frames, JinBoReplayPosition(index, clockTs))
     // 播放到末尾时，按钮回到“播放”
     if (!replayService.isPlaying) {
       playPauseBtn.text = "▶ 播放"

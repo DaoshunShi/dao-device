@@ -248,6 +248,12 @@ data class JinBoFrame(
   val buttons: List<JinBoButton> = emptyList(), // 按钮按下快照；旧回放帧缺失时为空
 )
 
+/** 回放游标所在位置：时间轴使用 [clockTs]，日志与状态展示使用该时刻对应的 [frame]。 */
+data class JinBoReplayPosition(
+  val frameIndex: Int,
+  val clockTs: Long,
+)
+
 /** 录制去重使用的可视状态快照；不包含采集时间和本帧日志。 */
 data class Snapshot(
   val curFloor: Int,

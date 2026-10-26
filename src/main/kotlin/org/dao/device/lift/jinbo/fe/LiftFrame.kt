@@ -107,15 +107,6 @@ class LiftFrame(val config: JinBoConfig) : JFrame("JinBo Lift Monitor"), GuiEven
     eventLogPanel.appendLog(event)
   }
 
-  /** 回放器只更新回放日志显示，不写入录制文件。 */
-  fun renderReplayLogs(frames: List<JinBoFrame>, index: Int) {
-    eventLogPanel.renderReplayLogs(frames, index)
-  }
-
-  fun clearLog() {
-    eventLogPanel.clearLog()
-  }
-
   private fun updateEmergencyBanner(emergencyStopped: Boolean) {
     emergencyBanner.isVisible = emergencyStopped
   }

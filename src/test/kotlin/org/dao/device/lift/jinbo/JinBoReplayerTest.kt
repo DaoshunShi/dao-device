@@ -9,6 +9,7 @@ import org.junit.jupiter.api.Test
 import java.io.File
 import javax.swing.JFrame
 import javax.swing.SwingUtilities
+import javax.swing.text.StyleConstants
 import org.junit.jupiter.api.Assumptions.assumeFalse
 import kotlin.test.assertEquals
 import kotlin.test.assertTrue
@@ -159,6 +160,7 @@ class JinBoReplayerTest {
       replay.onFrameChanged = { _, index, clockTs -> rendered.add(index to clockTs) }
       try {
         assertEquals(1, replay.openFile("replay-replayer-test.log"))
+        replay.seekFirstFrame()
         SwingUtilities.invokeAndWait { }
 
         assertEquals(listOf(0 to 1_000L), rendered)
@@ -210,6 +212,7 @@ class JinBoReplayerTest {
       val replay = JinBoReplayService(LIFT_ID)
       try {
         replay.openFile("replay-replayer-test.log")
+        replay.seekFirstFrame()
         SwingUtilities.invokeAndWait { }
 
         val inside: List<JinBoReq> = JsonHelper.mapper.readValue(
@@ -358,16 +361,175 @@ class JinBoReplayerTest {
         }
 
         assertTrue(eventLogPanel.replayToggleForTest().isSelected)
+        assertEquals("● 回放中", eventLogPanel.replayToggleForTest().text)
         assertTrue(replayPanel.isReplaying)
         assertTrue(JinBoEventBus.isReplayMode(LIFT_ID))
 
         SwingUtilities.invokeAndWait { eventLogPanel.replayToggleForTest().doClick() }
         assertTrue(!eventLogPanel.replayToggleForTest().isSelected)
+        assertEquals("回放", eventLogPanel.replayToggleForTest().text)
         assertTrue(!JinBoEventBus.isReplayMode(LIFT_ID))
       } finally {
         SwingUtilities.invokeAndWait { replayPanel.setReplayEnabled(false) }
         frame.dispose()
       }
+    }
+  }
+
+  @Test
+  fun `event log panel initializes replay toggle in realtime style`() {
+    assumeFalse(java.awt.GraphicsEnvironment.isHeadless())
+    val eventLogPanel = LiftEventLogPanel(configId = LIFT_ID, onShowLiftStatusChanged = {})
+
+    assertEquals("回放", eventLogPanel.replayToggleForTest().text)
+    assertTrue(!eventLogPanel.replayToggleForTest().isSelected)
+  }
+
+  @Test
+  fun `leaving replay restores realtime logs including events received during replay`() {
+    val replayFrame = JinBoFrame(
+      liftId = LIFT_ID,
+      ts = 1_000L,
+      curFloor = 2,
+      h = 3.0,
+      liftStatus = JinBoLiftStatus.Down,
+      doorStatus = JinBoDoorStatus.OPEN,
+      emergencyStopped = false,
+      reqs = JinBoRequestEntries(),
+      logs = listOf("replay-log"),
+    )
+    withReplayFile(FILE_NAME, frames = listOf(replayFrame), fileNamePattern = "replay-replayer-test.log") {
+      assumeFalse(java.awt.GraphicsEnvironment.isHeadless())
+      val frame = JFrame()
+      val replayPanel = LiftReplayPanel(
+        config = JinBoConfig(
+          id = LIFT_ID,
+          port = 0,
+          floors = listOf(JinBoFloor(1, "1F", 0.0), JinBoFloor(2, "2F", 3.0)),
+          liftSpeed = 1.0,
+          openCost = 100,
+          closeCost = 100,
+          closeDelay = 100,
+        ),
+        parentWindow = { frame },
+      )
+      val eventLogPanel = LiftEventLogPanel(configId = LIFT_ID, onShowLiftStatusChanged = {})
+      try {
+        SwingUtilities.invokeAndWait {
+          eventLogPanel.attachReplayPanel(replayPanel)
+          eventLogPanel.appendLog(LiftEvent("before", "realtime-before"))
+          eventLogPanel.replayToggleForTest().doClick()
+        }
+        assertTrue(eventLogPanel.logTextForTest().contains("replay-log"))
+
+        SwingUtilities.invokeAndWait {
+          eventLogPanel.appendLog(LiftEvent("during", "realtime-during"))
+          eventLogPanel.replayToggleForTest().doClick()
+        }
+
+        val realtimeText = eventLogPanel.logTextForTest()
+        assertTrue(realtimeText.contains("realtime-before"))
+        assertTrue(realtimeText.contains("realtime-during"))
+        assertTrue(!realtimeText.contains("replay-log"))
+      } finally {
+        SwingUtilities.invokeAndWait { replayPanel.setReplayEnabled(false) }
+        frame.dispose()
+      }
+    }
+  }
+
+  @Test
+  fun `enabling replay renders logs and gives the timeline measurable height`() {
+    val replayFrame = JinBoFrame(
+      liftId = LIFT_ID,
+      ts = 1_000L,
+      curFloor = 2,
+      h = 3.0,
+      liftStatus = JinBoLiftStatus.Down,
+      doorStatus = JinBoDoorStatus.OPEN,
+      emergencyStopped = false,
+      reqs = JinBoRequestEntries(),
+      logs = listOf("replay-log"),
+    )
+    withReplayFile(FILE_NAME, frames = listOf(replayFrame), fileNamePattern = "replay-replayer-test.log") {
+      assumeFalse(java.awt.GraphicsEnvironment.isHeadless())
+      val frame = JFrame()
+      val replayPanel = LiftReplayPanel(
+        config = JinBoConfig(
+          id = LIFT_ID,
+          port = 0,
+          floors = listOf(JinBoFloor(1, "1F", 0.0), JinBoFloor(2, "2F", 3.0)),
+          liftSpeed = 1.0,
+          openCost = 100,
+          closeCost = 100,
+          closeDelay = 100,
+        ),
+        parentWindow = { frame },
+      )
+      val eventLogPanel = LiftEventLogPanel(configId = LIFT_ID, onShowLiftStatusChanged = {})
+      try {
+        SwingUtilities.invokeAndWait {
+          frame.add(eventLogPanel)
+          frame.setSize(900, 600)
+          eventLogPanel.attachReplayPanel(replayPanel)
+          frame.isVisible = true
+          eventLogPanel.replayToggleForTest().doClick()
+          frame.validate()
+        }
+
+        assertTrue(eventLogPanel.logTextForTest().contains("replay-log"))
+        assertTrue(eventLogPanel.timelineHeightForTest() > 0)
+      } finally {
+        SwingUtilities.invokeAndWait {
+          replayPanel.setReplayEnabled(false)
+          frame.dispose()
+        }
+      }
+    }
+  }
+
+  @Test
+  fun `replay renders recorded direction and lift status`() {
+    val replayFrame = JinBoFrame(
+      liftId = LIFT_ID,
+      ts = 1_000L,
+      curFloor = 2,
+      h = 3.0,
+      liftStatus = JinBoLiftStatus.Up,
+      direction = JinBoLiftStatus.Down,
+      doorStatus = JinBoDoorStatus.OPEN,
+      emergencyStopped = false,
+      reqs = JinBoRequestEntries(),
+      logs = emptyList(),
+    )
+    withReplayFile(FILE_NAME, frames = listOf(replayFrame), fileNamePattern = "replay-replayer-test.log") {
+      assumeFalse(java.awt.GraphicsEnvironment.isHeadless())
+      val eventLogPanel = LiftEventLogPanel(configId = LIFT_ID, onShowLiftStatusChanged = {})
+
+      SwingUtilities.invokeAndWait {
+        eventLogPanel.renderReplayLogs(listOf(replayFrame), JinBoReplayPosition(0, replayFrame.ts))
+      }
+
+      assertEquals("方向: Down", eventLogPanel.directionTextForTest())
+      assertEquals("状态: Up", eventLogPanel.liftStatusTextForTest())
+    }
+  }
+
+  @Test
+  fun `seek highlights log from the frame at the requested second`() {
+    val frames = listOf(
+      replayLogFrame(ts = 1_000L, log = "first-log"),
+      replayLogFrame(ts = 2_000L, log = "second-log"),
+    )
+    withReplayFile(FILE_NAME, frames = frames, fileNamePattern = "replay-replayer-test.log") {
+      assumeFalse(java.awt.GraphicsEnvironment.isHeadless())
+      val eventLogPanel = LiftEventLogPanel(configId = LIFT_ID, onShowLiftStatusChanged = {})
+
+      SwingUtilities.invokeAndWait { eventLogPanel.renderReplayLogs(frames, JinBoReplayPosition(0, 1_500L)) }
+      assertTrue(eventLogPanel.logStyleForTest("first-log")!!.isDefined(StyleConstants.Bold))
+
+      SwingUtilities.invokeAndWait { eventLogPanel.renderReplayLogs(frames, JinBoReplayPosition(1, 2_000L)) }
+      assertTrue(eventLogPanel.logStyleForTest("second-log")!!.isDefined(StyleConstants.Bold))
     }
   }
 
@@ -424,6 +586,18 @@ class JinBoReplayerTest {
       file.delete()
     }
   }
+
+  private fun replayLogFrame(ts: Long, log: String): JinBoFrame = JinBoFrame(
+    liftId = LIFT_ID,
+    ts = ts,
+    curFloor = 1,
+    h = 0.0,
+    liftStatus = JinBoLiftStatus.Idle,
+    doorStatus = JinBoDoorStatus.CLOSE,
+    emergencyStopped = false,
+    reqs = JinBoRequestEntries(),
+    logs = listOf(log),
+  )
 
   private companion object {
     const val FILE_NAME = "replayer-test.log"

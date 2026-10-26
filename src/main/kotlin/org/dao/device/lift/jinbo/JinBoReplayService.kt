@@ -16,6 +16,12 @@ class JinBoReplayService(private val liftId: String) {
   val isReplaying: Boolean get() = replayer != null
   val isPlaying: Boolean get() = replayer?.isPlaying == true
   val currentTs: Long get() = replayer?.currentTs ?: 0
+  val currentPosition: JinBoReplayPosition
+    get() {
+      val frames = replayer?.allFrames.orEmpty()
+      val index = frames.indexOfLast { it.ts <= currentTs }.coerceAtLeast(0)
+      return JinBoReplayPosition(index, currentTs)
+    }
   internal val frameCount: Int get() = replayer?.frameCount ?: 0
   internal val allFrames: List<JinBoFrame> get() = replayer?.allFrames.orEmpty()
 
@@ -24,7 +30,7 @@ class JinBoReplayService(private val liftId: String) {
   /** 只返回包含当前电梯帧的回放文件，避免选中后得到空画面。 */
   fun listFiles(): List<String> = JinBoReplayer.listReplayFiles(liftId)
 
-  /** 先完整加载新文件，成功后才替换当前回放并切换到回放数据源。 */
+  /** 先完整加载新文件，成功后才替换当前回放并切换到回放数据源；首帧由调用方刷新时间轴后触发。 */
   fun openFile(fileName: String): Int {
     val next = JinBoReplayer(liftId)
     val loaded = next.load(fileName)
@@ -40,9 +46,12 @@ class JinBoReplayService(private val liftId: String) {
     JinBoEventBus.setReplayMode(liftId, true)
     val currentGeneration = generation
     next.onFrameChanged = { frames, index, clockTs -> showFrame(frames, index, clockTs, currentGeneration) }
-    next.seekIndex(0)
     previous?.dispose()
     return loaded
+  }
+
+  fun seekFirstFrame() {
+    replayer?.seekIndex(0)
   }
 
   fun close() {
@@ -86,7 +95,6 @@ class JinBoReplayService(private val liftId: String) {
       if (generation != expectedGeneration) return@Runnable
       JinBoStateService.fireState(liftId, frame)
       JinBoBtnService.fireFrame(liftId, frame)
-      JinBoLogService.renderReplayLogs(liftId, frames, index)
       onFrameChanged?.invoke(frames, index, clockTs)
     }
     if (SwingUtilities.isEventDispatchThread()) render.run() else SwingUtilities.invokeLater(render)
