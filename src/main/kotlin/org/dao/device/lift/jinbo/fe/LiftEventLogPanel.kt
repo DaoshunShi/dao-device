@@ -39,6 +39,7 @@ class LiftEventLogPanel(
   private val liftStatusLabel = JLabel("电梯状态: --")
   private val bottom = JPanel().apply { layout = BoxLayout(this, BoxLayout.Y_AXIS) }
   private val replayToggle = JToggleButton("回放")
+  private var syncingReplayToggle = false
 
   // 回放日志三色
   private val colorPlayed = Color(140, 140, 140) // 已播放：灰
@@ -90,13 +91,24 @@ class LiftEventLogPanel(
 
   /** 挂载回放控制行并绑定回放开关；面板构造完成后由窗口调用一次。 */
   fun attachReplayPanel(replayPanel: LiftReplayPanel) {
-    replayToggle.addActionListener { replayPanel.setReplayEnabled(replayToggle.isSelected) }
+    replayToggle.addActionListener {
+      if (!syncingReplayToggle) replayPanel.setReplayEnabled(replayToggle.isSelected)
+    }
+    replayPanel.onReplayStateChanged { replaying ->
+      // 成功加载后按钮必须保持选中；失败或关闭时由回放面板同步取消。
+      syncingReplayToggle = true
+      replayToggle.isSelected = replaying
+      syncingReplayToggle = false
+    }
     bottom.add(replayPanel)
     revalidate()
   }
 
+  internal fun replayToggleForTest(): JToggleButton = replayToggle
+
   /** 追加一条实时日志并更新各 topic 的事件计数。 */
   fun appendLog(event: LiftEvent) {
+    if (JinBoEventBus.isReplayMode(configId)) return
     // 更新事件计数器
     eventCounter[event.topic] = eventCounter.getOrDefault(event.topic, 0) + 1
 
@@ -131,6 +143,7 @@ class LiftEventLogPanel(
   fun renderReplayLogs(frames: List<JinBoFrame>, index: Int) {
     val doc = logArea.styledDocument
     doc.remove(0, doc.length)
+    frames.getOrNull(index)?.let { updateLiftStatus(it.liftStatus) }
 
     val played = SimpleAttributeSet().apply { StyleConstants.setForeground(this, colorPlayed) }
     val current = SimpleAttributeSet().apply {

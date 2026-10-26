@@ -13,6 +13,7 @@ import java.awt.RenderingHints
 import java.awt.event.MouseAdapter
 import java.awt.event.MouseEvent
 import java.awt.event.MouseMotionAdapter
+import javax.swing.JComponent
 import javax.swing.JPanel
 
 /**
@@ -46,14 +47,19 @@ class ReplayTimeline(
   private var frames: List<JinBoFrame> = emptyList()
   private var currentTs: Long = 0
   private var windowStart: Long = 0 // 当前可视小时窗起点（整点）
+  private var emptyMessage = "无回放数据"
 
   // 窗口内每秒的状态（S_NONE/S_REQ/S_MOVE），下标 0..3599
   private var secStates = IntArray(HOUR_SEC)
 
+  internal val frameCount: Int get() = frames.size
+
   init {
     background = Color.WHITE
+    // BoxLayout 会沿 Y 轴把子组件拉伸；对齐方式和固定高度避免控制行覆盖状态条。
+    alignmentX = JComponent.LEFT_ALIGNMENT
     preferredSize = Dimension(0, 56)
-    // 在 BoxLayout.Y_AXIS 中允许横向拉伸占满整行（高度锁定）
+    minimumSize = Dimension(0, 56)
     maximumSize = Dimension(Int.MAX_VALUE, 56)
     val onMouse = { x: Int ->
       if (frames.isNotEmpty()) onSeek(xToTs(x))
@@ -74,6 +80,11 @@ class ReplayTimeline(
     windowStart = hourFloor(currentTs)
     rebuildSecStates()
     repaint()
+  }
+
+  /** 设置无帧时要显示的原因，例如当前文件不含此电梯的帧。 */
+  fun setEmptyMessage(message: String) {
+    emptyMessage = message
   }
 
   /** 更新游标到指定帧时间；跨小时则切换窗口并重算秒格 */
@@ -147,13 +158,14 @@ class ReplayTimeline(
 
     if (frames.isEmpty()) {
       g2.color = Color.GRAY
-      g2.drawString("无回放数据", 4, height / 2)
+      g2.drawString(emptyMessage, 4, height / 2)
       return
     }
 
     val stripTop = 4
     val stripH = 12
     val trackY = stripTop + stripH + 14
+    val timelineTs = currentTs.coerceIn(frames.first().ts, frames.last().ts)
 
     // 秒格状态条：逐像素列映射到秒，取该秒状态着色
     drawSecStrip(g2, stripTop, stripH)
@@ -167,7 +179,7 @@ class ReplayTimeline(
     drawTicks(g2, trackY)
 
     // 游标（贯穿秒格条与轨道）
-    val cx = tsToX(currentTs)
+    val cx = tsToX(timelineTs)
     g2.color = COLOR_CURRENT
     g2.stroke = BasicStroke(2f)
     g2.drawLine(cx, stripTop, cx, trackY + 8)
@@ -175,7 +187,7 @@ class ReplayTimeline(
 
     // 游标时间标签
     g2.color = Color.DARK_GRAY
-    val label = DateFormatUtils.format(currentTs, "HH:mm:ss")
+    val label = DateFormatUtils.format(timelineTs, "HH:mm:ss")
     val lw = g2.fontMetrics.stringWidth(label)
     val lx = (cx - lw / 2).coerceIn(0, (width - lw).coerceAtLeast(0))
     g2.drawString(label, lx, trackY + 20)
