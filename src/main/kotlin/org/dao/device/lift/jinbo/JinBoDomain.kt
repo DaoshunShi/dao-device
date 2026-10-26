@@ -57,6 +57,13 @@ enum class JinBoLiftStatus {
   Up, // 上行
   Down, // 下行
   Idle, // 空闲
+  ;
+
+  fun opposite(): JinBoLiftStatus = when (this) {
+    Up -> Down
+    Down -> Up
+    Idle -> Idle
+  }
 }
 
 /**
@@ -119,7 +126,65 @@ data class JinBoDoor(
     openOn = if (newStatus == JinBoDoorStatus.CLOSE || newStatus == JinBoDoorStatus.ERROR) null else openOn
     opStartOn = if (newStatus == JinBoDoorStatus.OPENING || newStatus == JinBoDoorStatus.CLOSING) now else null
   }
+
+  /** 按门自身的状态推进一次；开门、关门和延迟时间取自 [config]。 */
+  fun advance(now: Date, config: JinBoDoorConfig) {
+    when (status) {
+      JinBoDoorStatus.OPENING -> {
+        val startedAt = opStartOn ?: now.also { opStartOn = it }
+        if (now.time - startedAt.time >= config.openCost) markOpen(now)
+      }
+
+      JinBoDoorStatus.OPEN -> {
+        val openedAt = openOn ?: now.also { openOn = it }
+        if (now.time - openedAt.time >= config.closeDelay) setStatus(JinBoDoorStatus.CLOSING, now)
+      }
+
+      JinBoDoorStatus.CLOSING -> {
+        val startedAt = opStartOn ?: now.also { opStartOn = it }
+        if (now.time - startedAt.time >= config.closeCost) setStatus(JinBoDoorStatus.CLOSE, now)
+      }
+
+      JinBoDoorStatus.CLOSE, JinBoDoorStatus.ERROR -> Unit
+    }
+  }
+
+  /** 开始开门；已在开门中的门不重复启动，已打开的门从 [openedAt] 重新计算自动关门延迟。 */
+  fun startOpening(openedAt: Date) {
+    openOn = openedAt
+    if (status != JinBoDoorStatus.OPENING) setStatus(JinBoDoorStatus.OPENING, openedAt)
+  }
+
+  /** 开始关门；已关闭、正在关闭或故障的门保持不变。 */
+  fun startClosing(now: Date) {
+    when (status) {
+      JinBoDoorStatus.OPENING, JinBoDoorStatus.OPEN -> setStatus(JinBoDoorStatus.CLOSING, now)
+      JinBoDoorStatus.CLOSE, JinBoDoorStatus.CLOSING, JinBoDoorStatus.ERROR -> Unit
+    }
+  }
+
+  /** 同层呼梯刷新自动关门延迟；正在关闭的门重新开门。 */
+  fun refreshSameFloorTimer(now: Date) {
+    when (status) {
+      JinBoDoorStatus.OPEN -> openOn = now
+      JinBoDoorStatus.CLOSING -> startOpening(now)
+      else -> Unit
+    }
+  }
+
+  /** 急停结束时顺延开门和关门计时。 */
+  fun shiftOperationTimers(offsetMs: Long) {
+    openOn = openOn?.let { Date(it.time + offsetMs) }
+    opStartOn = opStartOn?.let { Date(it.time + offsetMs) }
+  }
 }
+
+/** 单扇门推进所需的开门、关门和自动关门延迟配置。 */
+data class JinBoDoorConfig(
+  val openCost: Int,
+  val closeCost: Int,
+  val closeDelay: Int,
+)
 
 // -----------------------------------------------------------------------------
 // 回放帧
@@ -174,11 +239,11 @@ data class JinBoStatusResp(
       return JinBoStatusResp(
         currentFloor = runtime.curFloor.toString(),
         doorStatus = doorStatus,
-        emergencyStopped = runtime.emergencyStopped,
+        emergencyStopped = runtime.emc,
         doors = runtime.doors.map { JinBoDoorResp(it.code, it.status.openStatus) },
         destFloor = runtime.targetFloor,
         disabled = runtime.config.disabled,
-        fault = runtime.emergencyStopped,
+        fault = runtime.emc,
       )
     }
   }

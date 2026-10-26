@@ -12,7 +12,7 @@
     {"index": 7, "label": "6楼", "height": 20.0, "disabled": false},
     {"index": 8, "label": "7楼", "height": 24.0, "disabled": true}
   ],
-  "liftSpeed": 0.8,
+  "liftSpeed": 2.0,
   "openCost": 800,
   "closeCost": 800,
   "closeDelay": 5000,

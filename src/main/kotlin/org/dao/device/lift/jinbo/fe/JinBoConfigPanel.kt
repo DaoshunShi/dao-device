@@ -38,7 +38,7 @@ class JinBoConfigPanel(val config: JinBoConfig) :
     emergencyStopButton.margin = Insets(4, 10, 4, 10)
     emergencyStopButton.addActionListener {
       JinBoServer.toggleEmergencyStop(config.id)
-      updateEmergencyStopButton(JinBoServer.lifts[config.id]?.emergencyStopped == true)
+      updateEmergencyStopButton(JinBoServer.lifts[config.id]?.emc == true)
     }
     add(emergencyStopButton)
 
@@ -136,7 +136,7 @@ class JinBoConfigPanel(val config: JinBoConfig) :
     )
 
     JinBoEventBus.register(config.id, this)
-    updateEmergencyStopButton(JinBoServer.lifts[config.id]?.emergencyStopped == true)
+    updateEmergencyStopButton(JinBoServer.lifts[config.id]?.emc == true)
   }
 
   // 进入编辑模式

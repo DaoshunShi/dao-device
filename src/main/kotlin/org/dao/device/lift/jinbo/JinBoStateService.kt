@@ -11,13 +11,15 @@ object JinBoStateService {
     val snapshot = synchronized(lift) {
       StateSnapshot(
         h = lift.h,
+        liftStatus = lift.liftStatus,
         doors = lift.doors.map { it.copy() },
-        emergencyStopped = lift.emergencyStopped,
+        emergencyStopped = lift.emc,
       )
     }
     fire(
       liftId = liftId,
       h = snapshot.h,
+      liftStatus = snapshot.liftStatus,
       doors = snapshot.doors,
       emergencyStopped = snapshot.emergencyStopped,
     )
@@ -27,12 +29,19 @@ object JinBoStateService {
     fire(
       liftId = liftId,
       h = frame.h,
+      liftStatus = frame.liftStatus,
       doors = frame.doors.ifEmpty { listOf(JinBoDoor(code = 0, status = frame.doorStatus)) },
       emergencyStopped = frame.emergencyStopped,
     )
   }
 
-  private fun fire(liftId: String, h: Double, doors: List<JinBoDoor>, emergencyStopped: Boolean) {
+  private fun fire(
+    liftId: String,
+    h: Double,
+    liftStatus: JinBoLiftStatus,
+    doors: List<JinBoDoor>,
+    emergencyStopped: Boolean,
+  ) {
     JinBoEventBus.fire(
       liftId,
       LiftEvent(
@@ -40,7 +49,8 @@ object JinBoStateService {
         JsonHelper.mapper.writeValueAsString(
           mapOf(
             "h" to h,
-            "status" to aggregateDoorStatus(doors),
+            "liftStatus" to liftStatus.name,
+            "doorStatus" to aggregateDoorStatus(doors),
             "doors" to doors,
             "emergencyStopped" to emergencyStopped,
           ),
@@ -61,6 +71,7 @@ object JinBoStateService {
 
   private data class StateSnapshot(
     val h: Double,
+    val liftStatus: JinBoLiftStatus,
     val doors: List<JinBoDoor>,
     val emergencyStopped: Boolean,
   )

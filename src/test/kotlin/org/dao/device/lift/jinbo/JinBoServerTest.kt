@@ -1,6 +1,8 @@
 package org.dao.device.lift.jinbo
 
+import org.dao.device.common.JsonHelper
 import org.junit.jupiter.api.Test
+import java.io.File
 import java.util.Date
 import kotlin.math.abs
 import kotlin.test.assertEquals
@@ -10,6 +12,66 @@ import kotlin.test.assertNull
 import kotlin.test.assertTrue
 
 class JinBoServerTest {
+
+  @Test
+  fun `all elevator configurations use default lift speed 2`() {
+    val configFiles = File("config").listFiles { file -> file.extension == "json" }.orEmpty()
+
+    assertTrue(configFiles.isNotEmpty())
+    configFiles.forEach { file ->
+      val config = JsonHelper.mapper.readValue(file, JinBoConfig::class.java)
+      assertEquals(2.0, config.liftSpeed, file.name)
+    }
+  }
+
+  @Test
+  fun `opposite lift status reverses direction while idle stays idle`() {
+    assertEquals(JinBoLiftStatus.Down, JinBoLiftStatus.Up.opposite())
+    assertEquals(JinBoLiftStatus.Up, JinBoLiftStatus.Down.opposite())
+    assertEquals(JinBoLiftStatus.Idle, JinBoLiftStatus.Idle.opposite())
+  }
+
+  @Test
+  fun `door advances through open close states using operation timings`() {
+    val door = JinBoDoor(0)
+    val startedAt = Date(0)
+    val config = JinBoDoorConfig(openCost = 100, closeCost = 100, closeDelay = 200)
+    door.setStatus(JinBoDoorStatus.OPENING, startedAt)
+
+    door.advance(Date(99), config)
+    assertEquals(JinBoDoorStatus.OPENING, door.status)
+
+    door.advance(Date(100), config)
+    assertEquals(JinBoDoorStatus.OPEN, door.status)
+
+    door.advance(Date(299), config)
+    assertEquals(JinBoDoorStatus.OPEN, door.status)
+
+    door.advance(Date(300), config)
+    assertEquals(JinBoDoorStatus.CLOSING, door.status)
+
+    door.advance(Date(400), config)
+    assertEquals(JinBoDoorStatus.CLOSE, door.status)
+  }
+
+  @Test
+  fun `door handles closing same floor refresh and emergency timer shift`() {
+    val door = JinBoDoor(0, status = JinBoDoorStatus.OPEN, openOn = Date(0), opStartOn = Date(0))
+
+    door.refreshSameFloorTimer(Date(10))
+    assertEquals(10, door.openOn?.time)
+
+    door.startClosing(Date(20))
+    assertEquals(JinBoDoorStatus.CLOSING, door.status)
+
+    door.refreshSameFloorTimer(Date(30))
+    assertEquals(JinBoDoorStatus.OPENING, door.status)
+    assertEquals(30, door.opStartOn?.time)
+
+    door.shiftOperationTimers(100)
+    assertEquals(130, door.openOn?.time)
+    assertEquals(130, door.opStartOn?.time)
+  }
 
   @Test
   fun `arrives and opens all requested doors before clearing request`() {
@@ -81,7 +143,7 @@ class JinBoServerTest {
 
       assertEquals(1, runtime.curFloor)
       assertEquals(listOf(OpenTracker.OPEN, OpenTracker.OPEN), runtime.doorStates())
-      assertFalse(runtime.lifting)
+      assertFalse(runtime.isMoving())
 
       JinBoServer.close(LIFT_ID)
       JinBoServer.processLift(runtime)
@@ -118,10 +180,10 @@ class JinBoServerTest {
       JinBoServer.request(LIFT_ID, JinBoReq(3, JinBoReqSource.Tcp))
       JinBoServer.processLift(runtime)
       assertEquals(3, runtime.targetFloor)
-      assertTrue(runtime.lifting)
+      assertTrue(runtime.isMoving())
       runtime.lastMoveOn = null
       JinBoServer.processLift(runtime)
-      assertTrue(runtime.lifting)
+      assertTrue(runtime.isMoving())
       assertEquals(3, runtime.targetFloor)
       assertTrue(runtime.h > 0.0)
 
@@ -129,7 +191,7 @@ class JinBoServerTest {
       JinBoServer.processLift(runtime)
 
       assertEquals(2, runtime.targetFloor)
-      assertTrue(runtime.lifting)
+      assertTrue(runtime.isMoving())
       assertTrue(runtime.requestedFloors().contains(2))
     }
   }
@@ -200,7 +262,7 @@ class JinBoServerTest {
     withLift(runtime) {
       JinBoServer.request(LIFT_ID, JinBoReq(3, JinBoReqSource.Tcp))
       JinBoServer.request(LIFT_ID, JinBoReq(1, JinBoReqSource.Tcp))
-      runtime.travelDirection = JinBoLiftStatus.Down
+      runtime.direction = JinBoLiftStatus.Down
       JinBoServer.processLift(runtime)
 
       assertEquals(1, runtime.curFloor)

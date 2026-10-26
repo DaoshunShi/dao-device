@@ -200,7 +200,7 @@ class Cage(
         // 调试输出
         // println("[Cage DEBUG] Received elevator height: $elevatorHeight meters, minHeight: $minHeight, maxHeight: $maxHeight")
         updateHeight(elevatorHeight)
-        status = JinBoDoorStatus.valueOf(map["status"] as String)
+        status = JinBoDoorStatus.valueOf(map["doorStatus"] as String)
         val rawDoors = map["doors"] as? List<*>
         doors = if (rawDoors.isNullOrEmpty()) {
           listOf(JinBoDoor(code = 0, status = status))

@@ -36,7 +36,7 @@ object JinBoRecorder {
 
   /**
    * 采集一帧。必须在 synchronized(lr) 内调用（processLift 已满足）。
-   * 急停状态也应录制，故调用点需放在 emergencyStopped 提前返回之前。
+   * 急停状态也应录制，故调用点需放在 emc 提前返回之前。
    */
   fun capture(lr: JinBoRuntime) {
     val liftId = lr.config.id
@@ -51,7 +51,7 @@ object JinBoRecorder {
       h = lr.h,
       liftStatus = lr.liftStatus,
       doorStatus = aggregateDoorStatus(doors),
-      emergencyStopped = lr.emergencyStopped,
+      emergencyStopped = lr.emc,
       reqs = reqs,
       doors = doors,
     )
@@ -67,7 +67,7 @@ object JinBoRecorder {
       h = lr.h,
       liftStatus = lr.liftStatus,
       doorStatus = aggregateDoorStatus(doors),
-      emergencyStopped = lr.emergencyStopped,
+      emergencyStopped = lr.emc,
       reqs = reqs,
       logs = logs,
       doors = doors,

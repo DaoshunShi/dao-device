@@ -4,6 +4,7 @@ import org.dao.device.common.JsonHelper
 import java.io.File
 
 object JinBoRepo {
+  private const val DEFAULT_LIFT_SPEED = 2.0
   private const val CONFIG_DIR = "config"
   private const val DEFAULT_CONFIG_FILE = "default.json"
   private const val ELEVATOR_A_CONFIG_FILE = "elevator_A.json"
@@ -111,7 +112,7 @@ object JinBoRepo {
         JinBoFloor(5, "L4", 12.0),
         JinBoFloor(6, "L5", 15.0, disabled = true),
       ),
-      0.6,
+      DEFAULT_LIFT_SPEED,
       1 * 1000,
       1 * 1000,
       3 * 1000,
@@ -142,7 +143,7 @@ object JinBoRepo {
       JinBoFloor(3, "L3", 6.0),
       JinBoFloor(4, "L4", 9.0),
     ),
-    0.6,
+    DEFAULT_LIFT_SPEED,
     1 * 1000,
     1 * 1000,
     3 * 1000,

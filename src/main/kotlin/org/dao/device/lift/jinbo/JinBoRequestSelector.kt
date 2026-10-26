@@ -7,7 +7,7 @@ object JinBoRequestSelector {
   /** 运行中遇到同方向更近的请求时，提前把目标切换到该楼层。 */
   fun retargetNearerFloor(lr: JinBoRuntime) {
     val target = lr.targetFloor ?: return
-    if (!lr.lifting && lr.liftStatus != JinBoLiftStatus.Up && lr.liftStatus != JinBoLiftStatus.Down) return
+    if (!lr.isMoving()) return
 
     lr.targetFloor = when (lr.liftStatus) {
       JinBoLiftStatus.Up -> lr.reqs
@@ -24,7 +24,7 @@ object JinBoRequestSelector {
 
   /** 保留原有选择语义，同时更新目标楼层、方向及运行状态。 */
   fun selectBetterReq(lr: JinBoRuntime) {
-    val direction = if (lr.liftStatus == JinBoLiftStatus.Idle) lr.travelDirection else lr.liftStatus
+    val direction = if (lr.liftStatus == JinBoLiftStatus.Idle) lr.direction else lr.liftStatus
     val sameDirectionFloor = when (direction) {
       JinBoLiftStatus.Up -> lr.reqs
         .filter { it.destFloor > lr.curFloor && matchesTravelDirection(lr, it) }
@@ -44,7 +44,7 @@ object JinBoRequestSelector {
     val oppositeDirectionFloor = lr.reqs
       .filter {
         it.destFloor != lr.curFloor &&
-          JinBoDirection.requestMatches(it, JinBoDirection.opposite(direction))
+          JinBoDirection.requestMatches(it, direction.opposite())
       }
       .minByOrNull { abs(it.destFloor - lr.curFloor) }
       ?.destFloor
@@ -65,18 +65,15 @@ object JinBoRequestSelector {
         // 空闲时的同层呼梯先开门；方向只影响请求是否仍有效，不用于移动。
         else -> lr.reqs.firstOrNull { it.destFloor == lr.curFloor }?.type ?: JinBoLiftStatus.Idle
       }
-      lr.travelDirection = lr.liftStatus
-      // 同层请求也要先到达并开门，不能因为无需移动而跳过 afterArrive。
-      lr.lifting = false
+      lr.direction = lr.liftStatus
     }
 
     if (lr.targetFloor == null) {
       lr.liftStatus = JinBoLiftStatus.Idle
-      lr.travelDirection = JinBoLiftStatus.Idle
-      lr.lifting = false
+      lr.direction = JinBoLiftStatus.Idle
     }
   }
 
   private fun matchesTravelDirection(lr: JinBoRuntime, req: JinBoReq): Boolean =
-    JinBoDirection.arrivalMatches(lr.config, req, lr.travelDirection)
+    JinBoDirection.arrivalMatches(lr.config, req, lr.direction)
 }

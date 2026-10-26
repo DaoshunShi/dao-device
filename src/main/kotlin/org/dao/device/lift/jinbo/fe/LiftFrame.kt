@@ -3,8 +3,10 @@ package org.dao.device.lift.jinbo.fe
 import com.fasterxml.jackson.module.kotlin.jacksonTypeRef
 import org.dao.device.common.GuiEventListener
 import org.dao.device.common.JsonHelper
+import org.dao.device.lift.jinbo.JinBoConstants
 import org.dao.device.lift.jinbo.JinBoFrame
 import org.dao.device.lift.jinbo.JinBoConfig
+import org.dao.device.lift.jinbo.JinBoLiftStatus
 import org.dao.device.lift.jinbo.JinBoLogService
 import org.dao.device.lift.jinbo.JinBoServer
 import org.dao.device.lift.jinbo.event.LiftEvent
@@ -20,10 +22,6 @@ import javax.swing.JPanel
 import javax.swing.Timer
 
 class LiftFrame(val config: JinBoConfig) : JFrame("JinBo Lift Monitor"), GuiEventListener {
-
-  private companion object {
-    const val DISPLAY_INTERVAL_MS = 50 // 每秒 20 帧
-  }
 
   private val emergencyBanner = JLabel("当前处于急停状态", JLabel.CENTER).apply {
     isOpaque = true
@@ -45,7 +43,7 @@ class LiftFrame(val config: JinBoConfig) : JFrame("JinBo Lift Monitor"), GuiEven
     setupUi()
     setupScheduler()
     JinBoEventBus.register(config.id, this)
-    updateEmergencyBanner(JinBoServer.lifts[config.id]?.emergencyStopped == true)
+    updateEmergencyBanner(JinBoServer.lifts[config.id]?.emc == true)
   }
 
   override fun dispose() {
@@ -85,7 +83,7 @@ class LiftFrame(val config: JinBoConfig) : JFrame("JinBo Lift Monitor"), GuiEven
   }
 
   private fun setupScheduler() {
-    Timer(DISPLAY_INTERVAL_MS) {
+    Timer(JinBoConstants.SIMULATION_INTERVAL_MS.toInt()) {
       // 回放模式下暂停实时拉取，界面由 replayer 驱动
       if (replayPanel.isReplaying) return@Timer
       val str = JinBoFetcher.fetch(config.id)
@@ -124,6 +122,7 @@ class LiftFrame(val config: JinBoConfig) : JFrame("JinBo Lift Monitor"), GuiEven
     try {
       val map: Map<String, Any> = JsonHelper.mapper.readValue(event.msg, jacksonTypeRef())
       updateEmergencyBanner(map["emergencyStopped"] as? Boolean == true)
+      (map["liftStatus"] as? String)?.let { eventLogPanel.updateLiftStatus(JinBoLiftStatus.valueOf(it)) }
     } catch (_: Exception) {
     }
   }

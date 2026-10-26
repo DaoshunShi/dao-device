@@ -4,7 +4,6 @@ import com.fasterxml.jackson.annotation.JsonIgnore
 import org.dao.device.lift.jinbo.fe.LiftFrame
 import java.util.Date
 import java.util.concurrent.CopyOnWriteArrayList
-import kotlin.math.abs
 
 /** 一部电梯的可变运行状态。 */
 data class JinBoRuntime(
@@ -18,10 +17,7 @@ data class JinBoRuntime(
   var liftStatus: JinBoLiftStatus = JinBoLiftStatus.Idle // 电梯状态
 
   @Volatile
-  var travelDirection: JinBoLiftStatus = JinBoLiftStatus.Idle // 本轮运行方向，停靠开门期间保持
-
-  @Volatile
-  var lifting: Boolean = false // 上升、下降中
+  var direction: JinBoLiftStatus = JinBoLiftStatus.Idle // 本轮运行方向，停靠开门期间保持
 
   /** 每个门独立的运行状态和计时。门状态与门号一一对应，门编号从 0 开始。 */
   val doors: MutableList<JinBoDoor> = CopyOnWriteArrayList(
@@ -41,10 +37,10 @@ data class JinBoRuntime(
   var lastMoveOn: Long? = null // 上一次计算移动位移的时间，单位：ms
 
   @Volatile
-  var emergencyStopped: Boolean = false // 是否处于急停状态
+  var emc: Boolean = false // 是否处于急停状态
 
   @Volatile
-  var emergencyStartedAt: Date? = null // 急停开始时间
+  var emcStartedOn: Date? = null // 急停开始时间
 
   // 电梯 TCP 服务器
   @JsonIgnore
@@ -79,11 +75,8 @@ data class JinBoRuntime(
     frame.isVisible = false
   }
 
-  /** 电梯允许上下行。 */
-  fun canLifting(): Boolean = doors.all { it.status == JinBoDoorStatus.CLOSE }
-
   /** 电梯是否正在驶向其他楼层；移动中的门操作应被拒绝。 */
-  fun isMoving(): Boolean = lifting
+  fun isMoving(): Boolean = liftStatus != JinBoLiftStatus.Idle
 
   /** 门是否正在开启、保持开门或关门；到站停留期间不选择下一段行程。 */
   fun holdAtCurrentFloor(): Boolean = doors.any { door ->
@@ -92,10 +85,7 @@ data class JinBoRuntime(
       door.status == JinBoDoorStatus.CLOSING
   }
 
-  /** 正好在楼层里，可以开关门。 */
-  fun canOpenDoor(): Boolean = config.floors.any { abs(it.height - h) < FLOOR_EPS }
-
-  fun updateCfg(newCfg: JinBoConfig) {
+  fun updateConfig(newCfg: JinBoConfig) {
     require(newCfg.doorCount >= 1) { "电梯门数量必须大于等于 1" }
 
     config.port = newCfg.port
@@ -129,10 +119,5 @@ data class JinBoRuntime(
         doors.add(JinBoDoor(doors.size))
       }
     }
-  }
-
-  companion object {
-    // 楼层高度浮点比较容差（米）：h 由步进累加得到，不能用 == 直接比较
-    private const val FLOOR_EPS = 1e-6
   }
 }

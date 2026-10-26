@@ -7,12 +7,6 @@ package org.dao.device.lift.jinbo
  * 仍允许服务，避免端点呼梯永久留在队列中。
  */
 object JinBoDirection {
-  fun opposite(direction: JinBoLiftStatus): JinBoLiftStatus = when (direction) {
-    JinBoLiftStatus.Up -> JinBoLiftStatus.Down
-    JinBoLiftStatus.Down -> JinBoLiftStatus.Up
-    JinBoLiftStatus.Idle -> JinBoLiftStatus.Idle
-  }
-
   /** 判断呼梯是否允许作为指定运行方向上的停靠。 */
   fun requestMatches(req: JinBoReq, direction: JinBoLiftStatus): Boolean =
     req.source != JinBoReqSource.OutDoor ||

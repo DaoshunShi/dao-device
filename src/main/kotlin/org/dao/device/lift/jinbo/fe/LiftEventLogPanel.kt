@@ -2,6 +2,7 @@ package org.dao.device.lift.jinbo.fe
 
 import org.apache.commons.lang3.time.DateFormatUtils
 import org.dao.device.lift.jinbo.JinBoFrame
+import org.dao.device.lift.jinbo.JinBoLiftStatus
 import org.dao.device.lift.jinbo.event.LiftEvent
 import java.awt.BorderLayout
 import java.awt.Color
@@ -35,6 +36,7 @@ class LiftEventLogPanel(
   }
   private val eventCounter = mutableMapOf<String, Int>()
   private val statusLabel = JLabel("状态: 等待事件...")
+  private val liftStatusLabel = JLabel("电梯状态: --")
   private val bottom = JPanel().apply { layout = BoxLayout(this, BoxLayout.Y_AXIS) }
   private val replayToggle = JToggleButton("回放")
 
@@ -71,6 +73,8 @@ class LiftEventLogPanel(
         add(Box.createHorizontalStrut(10))
         add(statusLabel)
         add(Box.createHorizontalGlue()) // 添加弹性空间
+        add(liftStatusLabel)
+        add(Box.createHorizontalStrut(10))
         add(replayToggle)
         add(Box.createHorizontalStrut(10))
         add(
@@ -107,8 +111,14 @@ class LiftEventLogPanel(
     updateStatus()
   }
 
+  /** 实时运行和回放共用该入口，按 liftState 事件更新电梯方向状态。 */
+  fun updateLiftStatus(status: JinBoLiftStatus) {
+    liftStatusLabel.text = "电梯状态: ${status.name}"
+  }
+
   fun clearLog() {
     logArea.text = ""
+    liftStatusLabel.text = "电梯状态: --"
   }
 
   /**

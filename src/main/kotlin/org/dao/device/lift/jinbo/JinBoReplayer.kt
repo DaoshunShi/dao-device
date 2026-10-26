@@ -21,7 +21,6 @@ class JinBoReplayer(private val liftId: String) {
 
   companion object {
     private const val LOG_DIR = "logs"
-    private const val PLAYBACK_INTERVAL_MS = 500 // 每秒 2 帧
     private const val BASE_STEP_MS = 500L // 每帧推进的虚拟时间
 
     /** 列出 logs 目录下所有回放文件名（replay.log 及轮转文件），按名称排序 */
@@ -100,7 +99,7 @@ class JinBoReplayer(private val liftId: String) {
     if (frames.isEmpty()) return
     stopTimer()
     // 到达末尾/开头时再按播放，从边界继续
-    timer = Timer(PLAYBACK_INTERVAL_MS) { tick() }.apply { start() }
+    timer = Timer(JinBoConstants.REPLAY_INTERVAL_MS.toInt()) { tick() }.apply { start() }
   }
 
   /** 暂停播放（保留虚拟时钟位置） */

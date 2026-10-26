@@ -7,7 +7,7 @@
     {"index": 3, "label": "L3", "height": 6.0, "disabled": false},
     {"index": 4, "label": "L4", "height": 9.0, "disabled": false}
   ],
-  "liftSpeed": 0.6,
+  "liftSpeed": 2.0,
   "openCost": 1000,
   "closeCost": 1000,
   "closeDelay": 3000,
