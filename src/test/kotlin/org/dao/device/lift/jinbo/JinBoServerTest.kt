@@ -215,6 +215,31 @@ class JinBoServerTest {
   }
 
   @Test
+  fun `out goto opposite to an upward pass stays pending at the requested floor`() {
+    val runtime = newRuntime(initialFloor = 1)
+
+    withLift(runtime) {
+      JinBoServer.request(LIFT_ID, JinBoReq(3, JinBoReqSource.Tcp))
+      JinBoServer.processLift(runtime)
+      JinBoServer.request(
+        LIFT_ID,
+        JinBoReq(2, JinBoReqSource.OutDoor, JinBoLiftStatus.Down, listOf(0)),
+      )
+      repeat(2) { JinBoServer.processLift(runtime) }
+
+      assertEquals(3, runtime.curFloor)
+      assertEquals(setOf(2), runtime.requestedFloors())
+
+      JinBoServer.close(LIFT_ID)
+      repeat(3) { JinBoServer.processLift(runtime) }
+
+      assertEquals(2, runtime.curFloor)
+      assertEquals(JinBoDoorStatus.OPEN, runtime.doors[0].status)
+      assertTrue(runtime.reqs.none { it.destFloor == 2 && it.type == JinBoLiftStatus.Down })
+    }
+  }
+
+  @Test
   fun `out goto opposite the current travel direction is left pending at a non endpoint floor`() {
     val runtime = newRuntime(initialFloor = 1)
 
