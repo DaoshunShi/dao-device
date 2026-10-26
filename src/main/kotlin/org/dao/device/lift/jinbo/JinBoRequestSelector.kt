@@ -4,6 +4,29 @@ import kotlin.math.abs
 
 /** 在当前未完成请求中选择下一停靠楼层；调用方负责持有电梯运行时的同步锁。 */
 object JinBoRequestSelector {
+  /**
+   * 开门期间根据剩余请求重新选择服务方向，但不启动移动。
+   * 下一次停靠楼层保持为空，关门后由 [selectBetterReq] 按新方向选择并出发。
+   */
+  fun selectDirectionDuringDoorHold(lr: JinBoRuntime) {
+    if (lr.targetFloor != null || lr.liftStatus != JinBoLiftStatus.Idle) return
+    if (lr.doors.none { it.status == JinBoDoorStatus.OPEN }) return
+    val remainingRequests = lr.reqs.filterNot { req -> req.isOpenAtCurrentFloor(lr) }
+    val direction = lr.direction
+    val sameDirectionRequest = remainingRequests.any { req -> req.canBeServedToward(direction, lr.curFloor) }
+    if (sameDirectionRequest) return
+
+    val oppositeDirection = direction.opposite()
+    val nextDirection = oppositeDirection.takeIf { opposite ->
+      remainingRequests.any { req -> req.canBeServedToward(opposite, lr.curFloor) }
+    } ?: remainingRequests
+      .firstOrNull { it.destFloor != lr.curFloor }
+      ?.destFloor
+      ?.compareTo(lr.curFloor)
+      ?.let { if (it > 0) JinBoLiftStatus.Up else JinBoLiftStatus.Down }
+    if (nextDirection != null) lr.direction = nextDirection
+  }
+
   /** 运行中遇到同方向更近的请求时，提前把目标切换到该楼层。 */
   fun retargetNearerFloor(lr: JinBoRuntime) {
     val target = lr.targetFloor ?: return
@@ -76,4 +99,18 @@ object JinBoRequestSelector {
 
   private fun matchesTravelDirection(lr: JinBoRuntime, req: JinBoReq): Boolean =
     JinBoDirection.arrivalMatches(lr.config, req, lr.direction)
+
+  private fun JinBoReq.isOpenAtCurrentFloor(lr: JinBoRuntime): Boolean =
+    destFloor == lr.curFloor &&
+      doorCodes.ifEmpty { listOf(0) }.all { code ->
+        lr.doors.firstOrNull { it.code == code }?.status == JinBoDoorStatus.OPEN
+      }
+
+  private fun JinBoReq.canBeServedToward(direction: JinBoLiftStatus, currentFloor: Int): Boolean =
+    JinBoDirection.requestMatches(this, direction) &&
+      when (direction) {
+        JinBoLiftStatus.Up -> destFloor >= currentFloor
+        JinBoLiftStatus.Down -> destFloor <= currentFloor
+        JinBoLiftStatus.Idle -> false
+      }
 }

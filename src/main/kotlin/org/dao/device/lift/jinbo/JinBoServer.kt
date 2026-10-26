@@ -105,8 +105,14 @@ object JinBoServer {
       // 刚到站时门仍为 OPENING，路过或正在离开时也不能清理请求。
       if (!lr.isMoving()) JinBoMoveService.cleanOpenedFloorReq(lr)
 
-      // 门流程结束前不选择下一站，保证到站后完整等待自动关门延迟。
-      if (lr.targetFloor == null && !lr.holdAtCurrentFloor()) JinBoRequestSelector.selectBetterReq(lr)
+      // 门流程结束前不选择下一站；门保持开启期间只调整方向，关门后按新方向出发。
+      if (lr.targetFloor == null) {
+        if (lr.doors.any { it.status == JinBoDoorStatus.OPEN }) {
+          JinBoRequestSelector.selectDirectionDuringDoorHold(lr)
+        } else if (!lr.holdAtCurrentFloor()) {
+          JinBoRequestSelector.selectBetterReq(lr)
+        }
+      }
 
       // 运行中收到当前方向上更近的停靠请求时，不能等到原目标楼层；
       // 在越过新目标楼层前切换目标，使其正常停靠、开门并清理该请求。

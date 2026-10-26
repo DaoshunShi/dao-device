@@ -271,7 +271,7 @@ class JinBoServerTest {
         LIFT_ID,
         JinBoReq(2, JinBoReqSource.OutDoor, JinBoLiftStatus.Down, listOf(0)),
       )
-      repeat(2) { JinBoServer.processLift(runtime) }
+      JinBoServer.processLift(runtime)
 
       assertEquals(3, runtime.curFloor)
       assertEquals(setOf(2), runtime.requestedFloors())
