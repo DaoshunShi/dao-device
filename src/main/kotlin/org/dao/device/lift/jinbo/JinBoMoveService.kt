@@ -67,8 +67,7 @@ object JinBoMoveService {
     }
   }
 
-  private fun canLift(lift: JinBoRuntime): Boolean =
-    lift.doors.all { it.status == JinBoDoorStatus.CLOSE }
+  private fun canLift(lift: JinBoRuntime): Boolean = lift.allDoorsClosed()
 
   private fun matchesTravelDirection(lift: JinBoRuntime, req: JinBoReq, direction: JinBoLiftStatus): Boolean =
     JinBoDirection.arrivalMatches(lift.config, req, direction)

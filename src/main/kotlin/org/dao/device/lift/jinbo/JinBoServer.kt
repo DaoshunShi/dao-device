@@ -43,9 +43,7 @@ object JinBoServer {
     lifts.remove(liftId)?.dispose()
   }
 
-  /**
-   * 仅用于更新
-   */
+  /** 更新运行中的电梯配置。 */
   fun updateConfig(cfg: JinBoConfig) {
     lifts[cfg.id]?.let { lift ->
       withLiftLock(lift, "JinBoServer.updateConfig") {
@@ -87,7 +85,7 @@ object JinBoServer {
 
       // 门流程结束前不选择下一站；门保持开启期间只调整方向，关门后按新方向出发。
       if (lr.targetFloor == null) {
-        if (lr.doors.any { it.status == JinBoDoorStatus.OPEN }) {
+        if (lr.hasOpenDoor()) {
           JinBoRequestSelector.selectDirectionDuringDoorHold(lr)
         } else if (!lr.holdAtCurrentFloor()) {
           JinBoRequestSelector.selectBetterReq(lr)
@@ -101,7 +99,7 @@ object JinBoServer {
       // 跨层移动必须先关闭全部门；门关闭后本 tick 才开始移动
       if (lr.targetFloor != null && lr.targetFloor != lr.curFloor) {
         JinBoDoorService.close(lr)
-        if (lr.doors.all { it.status == JinBoDoorStatus.CLOSE }) {
+        if (lr.allDoorsClosed()) {
           JinBoMoveService.advance(lr)
         }
       }

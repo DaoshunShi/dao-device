@@ -7,14 +7,21 @@ import org.dao.device.lift.jinbo.fe.JinBoEventBus
 /** 电梯按钮与请求队列：呼梯请求入队后，按钮高亮直接从请求队列派生。 */
 object JinBoBtnService {
 
-  /** TCP/HTTP 请求没有实体按钮，只记录请求队列。 */
-  fun press(liftId: String, req: JinBoReq): JinBoResp = request(liftId, req)
+  /** TCP/HTTP 和页面按钮共用的请求入队入口。 */
+  fun press(liftId: String, req: JinBoReq): JinBoResp {
+    val response = JinBoServer.request(liftId, req)
+    if (response.code == "0") {
+      JinBoLogService.logEvent(liftId, LiftEvent(req.source.name, JsonHelper.writeValueAsString(req)))
+      refreshRequests(liftId)
+    }
+    return response
+  }
 
   /** 面板按钮与 TCP/HTTP 共用同一入队路径。 */
   fun pressButton(liftId: String, req: JinBoReq): JinBoResp {
     if (JinBoEventBus.isReplayMode(liftId)) return JinBoResp("409", "回放状态下禁止页面呼梯")
     logCallPress(liftId, req)
-    return request(liftId, req)
+    return press(liftId, req)
   }
 
   private fun logCallPress(liftId: String, req: JinBoReq) {
@@ -59,15 +66,6 @@ object JinBoBtnService {
       LiftEvent("按钮按下", "电梯=$liftId, 面板=$panel, 楼层=$floor, 按钮=$action"),
     )
     return command()
-  }
-
-  private fun request(liftId: String, req: JinBoReq): JinBoResp {
-    val response = JinBoServer.request(liftId, req)
-    if (response.code == "0") {
-      JinBoLogService.logEvent(liftId, LiftEvent(req.source.name, JsonHelper.writeValueAsString(req)))
-      refreshRequests(liftId)
-    }
-    return response
   }
 
   /** 请求入队后立即刷新 reqs，不等待下一次仿真 tick。 */

@@ -138,8 +138,6 @@ class JinBoConfigPanel(val config: JinBoConfig) :
 
   // 保存配置
   private fun saveConfig() {
-    // 这里可以添加保存到配置文件的逻辑
-    // 例如: saveConfigToFile();
     val editedConfig = try {
       CONFIG_FIELDS.fold(config) { current, configField ->
         configField.apply(current, fieldInputs.getValue(configField).text)

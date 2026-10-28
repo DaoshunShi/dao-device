@@ -34,11 +34,11 @@ object JinBoRequestSelector {
 
     lr.targetFloor = when (lr.liftStatus) {
       JinBoLiftStatus.Up -> lr.reqs
-        .filter { it.destFloor > lr.curFloor && it.destFloor < target && matchesTravelDirection(lr, it) }
+        .filter { it.destFloor > lr.curFloor && it.destFloor < target && JinBoDirection.arrivalMatches(lr.config, it, lr.direction) }
         .minOfOrNull { it.destFloor }
 
       JinBoLiftStatus.Down -> lr.reqs
-        .filter { it.destFloor < lr.curFloor && it.destFloor > target && matchesTravelDirection(lr, it) }
+        .filter { it.destFloor < lr.curFloor && it.destFloor > target && JinBoDirection.arrivalMatches(lr.config, it, lr.direction) }
         .maxOfOrNull { it.destFloor }
 
       JinBoLiftStatus.Idle -> null
@@ -50,11 +50,11 @@ object JinBoRequestSelector {
     val direction = if (lr.liftStatus == JinBoLiftStatus.Idle) lr.direction else lr.liftStatus
     val sameDirectionFloor = when (direction) {
       JinBoLiftStatus.Up -> lr.reqs
-        .filter { it.destFloor > lr.curFloor && matchesTravelDirection(lr, it) }
+        .filter { it.destFloor > lr.curFloor && JinBoDirection.arrivalMatches(lr.config, it, lr.direction) }
         .minOfOrNull { it.destFloor }
 
       JinBoLiftStatus.Down -> lr.reqs
-        .filter { it.destFloor < lr.curFloor && matchesTravelDirection(lr, it) }
+        .filter { it.destFloor < lr.curFloor && JinBoDirection.arrivalMatches(lr.config, it, lr.direction) }
         .maxOfOrNull { it.destFloor }
 
       JinBoLiftStatus.Idle -> lr.reqs
@@ -96,9 +96,6 @@ object JinBoRequestSelector {
       lr.direction = JinBoLiftStatus.Idle
     }
   }
-
-  private fun matchesTravelDirection(lr: JinBoRuntime, req: JinBoReq): Boolean =
-    JinBoDirection.arrivalMatches(lr.config, req, lr.direction)
 
   private fun JinBoReq.isOpenAtCurrentFloor(lr: JinBoRuntime): Boolean =
     destFloor == lr.curFloor &&

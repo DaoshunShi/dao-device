@@ -78,11 +78,15 @@ data class JinBoRuntime(
   /** 电梯是否正在驶向其他楼层；移动中的门操作应被拒绝。 */
   fun isMoving(): Boolean = liftStatus != JinBoLiftStatus.Idle
 
+  /** 是否存在已经打开的门。 */
+  fun hasOpenDoor(): Boolean = doors.any { it.status == JinBoDoorStatus.OPEN }
+
+  /** 是否所有门都已关闭。 */
+  fun allDoorsClosed(): Boolean = doors.all { it.status == JinBoDoorStatus.CLOSE }
+
   /** 门是否正在开启、保持开门或关门；到站停留期间不选择下一段行程。 */
-  fun holdAtCurrentFloor(): Boolean = doors.any { door ->
-    door.status == JinBoDoorStatus.OPEN ||
-      door.status == JinBoDoorStatus.OPENING ||
-      door.status == JinBoDoorStatus.CLOSING
+  fun holdAtCurrentFloor(): Boolean = hasOpenDoor() || doors.any { door ->
+    door.status == JinBoDoorStatus.OPENING || door.status == JinBoDoorStatus.CLOSING
   }
 
   fun updateConfig(newCfg: JinBoConfig) {
@@ -110,14 +114,11 @@ data class JinBoRuntime(
 
     config.doorCount = newDoorCount
     // 已开的门保持当前状态；新增门从关闭态开始，删除门时一并移除其计时
-    if (doors.size > newDoorCount) {
-      while (doors.size > newDoorCount) {
-        doors.removeAt(doors.lastIndex)
-      }
-    } else {
-      while (doors.size < newDoorCount) {
-        doors.add(JinBoDoor(doors.size))
-      }
+    repeat((doors.size - newDoorCount).coerceAtLeast(0)) {
+      doors.removeAt(doors.lastIndex)
+    }
+    repeat((newDoorCount - doors.size).coerceAtLeast(0)) {
+      doors.add(JinBoDoor(doors.size))
     }
   }
 }
