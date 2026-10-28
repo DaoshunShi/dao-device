@@ -81,6 +81,10 @@ data class JinBoRuntime(
   /** 是否存在已经打开的门。 */
   fun hasOpenDoor(): Boolean = doors.any { it.status == JinBoDoorStatus.OPEN }
 
+  /** 是否无需处理当前 tick。 */
+  fun isSimulationIdle(): Boolean =
+    reqs.isEmpty() && !isMoving() && targetFloor == null && allDoorsClosed() && !emc
+
   /** 是否所有门都已关闭。 */
   fun allDoorsClosed(): Boolean = doors.all { it.status == JinBoDoorStatus.CLOSE }
 

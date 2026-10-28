@@ -174,7 +174,7 @@ class JinBoReplayerTest {
         }
       }
       JinBoEventBus.register(LIFT_ID, listener)
-      val replay = JinBoReplayService(LIFT_ID)
+      val replay = JinBoReplayer(LIFT_ID)
       val rendered = mutableListOf<Pair<Int, Long>>()
       replay.onFrameChanged = { _, index, clockTs -> rendered.add(index to clockTs) }
       try {
@@ -228,7 +228,7 @@ class JinBoReplayerTest {
         }
       }
       JinBoEventBus.register(LIFT_ID, listener)
-      val replay = JinBoReplayService(LIFT_ID)
+      val replay = JinBoReplayer(LIFT_ID)
       try {
         replay.openFile("replay-replayer-test.log")
         replay.seekFirstFrame()
@@ -255,7 +255,7 @@ class JinBoReplayerTest {
   fun `failed replay switch keeps the active replay and replay mode`() {
     withReplayFile(FILE_NAME, listOf(1_000L), fileNamePattern = "replay-replayer-test.log") {
       val emptyFile = File("logs", "replay-empty-test.log").apply { writeText("") }
-      val replay = JinBoReplayService(LIFT_ID)
+      val replay = JinBoReplayer(LIFT_ID)
       try {
         assertEquals(1, replay.openFile("replay-replayer-test.log"))
         assertEquals(0, replay.openFile(emptyFile.name))

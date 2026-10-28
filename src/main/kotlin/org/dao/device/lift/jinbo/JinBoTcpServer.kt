@@ -254,14 +254,14 @@ class ServerHandler(val liftId: String, val server: JinBoTcpServer) : SimpleChan
 
       0x3e9 -> {
         // 关门
-        val resp = JinBoServer.close(liftId)
+        val resp = JinBoCommandService.close(liftId)
         JinBoLogService.logEvent(liftId, LiftEvent("tcp-close", JsonHelper.writeValueAsString(resp)))
         JsonHelper.writeValueAsString(resp)
       }
 
       0x7d0 -> {
         // 获取电梯状态
-        JsonHelper.writeValueAsString(JinBoServer.status(liftId))
+        JsonHelper.writeValueAsString(JinBoCommandService.status(liftId))
       }
 
       else -> {

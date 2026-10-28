@@ -1,6 +1,7 @@
 package org.dao.device.lift.jinbo
 
 import org.dao.device.common.JsonHelper
+import org.dao.device.lift.jinbo.fe.JinBoEventBus
 import java.io.File
 import javax.swing.Timer
 
@@ -10,7 +11,7 @@ import javax.swing.Timer
  * 职责：
  * - 读取 logs/replay*.log 的 JSONL 帧，按 liftId 过滤、按 ts 升序，构建帧序列。
  * - 维护当前帧指针；按 2fps 的基准节奏和可配置倍率播放，支持 seek。
- * - 通过 onFrameChanged 报告当前帧，回放事件由 JinBoReplayService 转换。
+ * - 通过 onFrameChanged 报告当前帧，并直接广播回放状态事件。
  *
  * 说明：录制侧做了去重（相邻相同状态不落帧），故帧序列是稀疏的。
  * seek(ts) 采用“取 ts <= 目标时刻的最后一帧”，静止空档也能正确停住。
@@ -59,6 +60,7 @@ class JinBoReplayer(private val liftId: String) {
   private var clockTs: Long = 0 // 虚拟时钟（毫秒），回放按真实时间推进
   private var playbackRate = DEFAULT_PLAYBACK_RATE
   private var timer: Timer? = null
+  private var generation = 0
 
   /**
    * 每次渲染时回调，供 UI 更新时间轴/时间标签/日志分色。
@@ -71,6 +73,12 @@ class JinBoReplayer(private val liftId: String) {
   val frameCount: Int get() = frames.size
   val allFrames: List<JinBoFrame> get() = frames
   val isPlaying: Boolean get() = timer?.isRunning == true
+  val isReplaying: Boolean get() = frames.isNotEmpty()
+  val currentPosition: JinBoReplayPosition
+    get() {
+      val index = frames.indexOfLast { it.ts <= clockTs }.coerceAtLeast(0)
+      return JinBoReplayPosition(index, clockTs)
+    }
 
   private val firstTs get() = frames.firstOrNull()?.ts ?: 0
   private val lastTs get() = frames.lastOrNull()?.ts ?: 0
@@ -106,10 +114,12 @@ class JinBoReplayer(private val liftId: String) {
       }
     }
 
-    frames = parsed.sortedBy { it.ts }
-    clockTs = firstTs
-    playbackRate = DEFAULT_PLAYBACK_RATE
-    return frames.size
+    if (parsed.isNotEmpty()) {
+      frames = parsed.sortedBy { it.ts }
+      clockTs = firstTs
+      playbackRate = DEFAULT_PLAYBACK_RATE
+    }
+    return parsed.size
   }
 
   /** 设置播放倍率；小于等于 0 的值回退到默认的 1 倍速。 */
@@ -145,6 +155,39 @@ class JinBoReplayer(private val liftId: String) {
   }
 
   /** 停止并释放定时器（关闭回放时调用） */
+  /** 列出包含当前电梯帧的回放文件。 */
+  fun listFiles(): List<String> = listReplayFiles(liftId)
+
+  /** 加载指定回放文件并进入回放模式；文件无有效帧时返回 0。 */
+  fun openFile(fileName: String): Int {
+    val loaded = load(fileName)
+    if (loaded == 0) return 0
+    generation++
+    JinBoEventBus.setReplayMode(liftId, true)
+    return loaded
+  }
+
+  fun seekFirstFrame() {
+    seekIndex(0)
+  }
+
+  fun close() {
+    generation++
+    JinBoEventBus.setReplayMode(liftId, false)
+    dispose()
+  }
+
+  fun playOrPause(): Boolean {
+    if (frames.isEmpty()) return false
+    if (isPlaying) pause() else play()
+    return isPlaying
+  }
+
+  fun jumpBy(offsetMs: Long) {
+    seek(clockTs + offsetMs)
+    if (isPlaying) play()
+  }
+
   fun dispose() {
     stopTimer()
     frames = emptyList()
@@ -173,10 +216,12 @@ class JinBoReplayer(private val liftId: String) {
     }
   }
 
-  /** 通知调用方当前帧及虚拟时钟。 */
+  /** 广播当前帧的 UI 状态与按钮/请求事件，再通知调用方更新时间轴。 */
   private fun renderCurrent() {
     val index = indexAt(clockTs)
-    if (frames.getOrNull(index) == null) return
+    val frame = frames.getOrNull(index) ?: return
+    JinBoStateService.fireState(liftId, frame)
+    JinBoStateService.fireFrame(liftId, frame)
     onFrameChanged?.invoke(frames, index, clockTs)
   }
 

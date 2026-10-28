@@ -9,7 +9,7 @@ object JinBoBtnService {
 
   /** TCP/HTTP 和页面按钮共用的请求入队入口。 */
   fun press(liftId: String, req: JinBoReq): JinBoResp {
-    val response = JinBoServer.request(liftId, req)
+    val response = JinBoCommandService.request(liftId, req)
     if (response.code == "0") {
       JinBoLogService.logEvent(liftId, LiftEvent(req.source.name, JsonHelper.writeValueAsString(req)))
       refreshRequests(liftId)
@@ -40,7 +40,7 @@ object JinBoBtnService {
     if (JinBoEventBus.isReplayMode(liftId)) return JinBoResp("409", "回放状态下禁止页面开门")
     return pressControl(liftId, "LiftInsidePanel", "开门") {
       val lift = JinBoServer.lifts[liftId] ?: return@pressControl JinBoResp("404", "$liftId 电梯不存在")
-      JinBoServer.open(liftId, emptyList()).also {
+      JinBoCommandService.open(liftId, emptyList()).also {
         if (it.code == "0") JinBoLogService.logEvent(liftId, LiftEvent("in-open", "destFloor=${lift.curFloor}"))
       }
     }
@@ -51,7 +51,7 @@ object JinBoBtnService {
     if (JinBoEventBus.isReplayMode(liftId)) return JinBoResp("409", "回放状态下禁止页面关门")
     val panel = if (fromTcp) "LiftTcpPanel" else "LiftInsidePanel"
     return pressControl(liftId, panel, "关门") {
-      JinBoServer.close(liftId).also {
+      JinBoCommandService.close(liftId).also {
         if (it.code == "0") {
           JinBoLogService.logEvent(liftId, LiftEvent("关闭", if (fromTcp) "TCP栏关门按钮" else "关门按钮"))
         }

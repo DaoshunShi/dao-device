@@ -19,7 +19,7 @@ object JinBoHandler {
     val liftId = ctx.pathParam("liftId")
     logger.info("lift close, lift: $liftId")
 
-    val resp = JinBoServer.close(liftId)
+    val resp = JinBoCommandService.close(liftId)
     ctx.json(resp)
   }
 
@@ -27,7 +27,7 @@ object JinBoHandler {
     val liftId = ctx.pathParam("liftId")
     logger.info("lift status, lift: $liftId")
 
-    val resp = JinBoServer.status(liftId)
+    val resp = JinBoCommandService.status(liftId)
     ctx.json(resp)
   }
 }

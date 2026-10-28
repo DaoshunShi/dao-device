@@ -4,7 +4,7 @@ import org.apache.commons.lang3.time.DateFormatUtils
 import org.dao.device.lift.jinbo.JinBoConfig
 import org.dao.device.lift.jinbo.JinBoFrame
 import org.dao.device.lift.jinbo.JinBoReplayPosition
-import org.dao.device.lift.jinbo.JinBoReplayService
+import org.dao.device.lift.jinbo.JinBoReplayer
 import java.awt.BorderLayout
 import java.awt.Dimension
 import java.awt.FlowLayout
@@ -30,13 +30,13 @@ class LiftReplayPanel(
   private val parentWindow: () -> Window,
 ) : JPanel(BorderLayout()) {
 
-  private val replayService = JinBoReplayService(config.id)
+  private val replayer = JinBoReplayer(config.id)
 
-  val isReplaying: Boolean get() = replayService.isReplaying
+  val isReplaying: Boolean get() = replayer.isReplaying
 
   private val playPauseBtn = JButton("▶ 播放")
   private val replayTimeLabel = JLabel("--:--:--")
-  private val replayTimeline = ReplayTimeline { ts -> replayService.seek(ts) }
+  private val replayTimeline = ReplayTimeline { ts -> replayer.seek(ts) }
   private val replayFileCombo = JComboBox<String>()
   private val playbackRateCombo = JComboBox<Double>(PLAYBACK_RATES)
   private var suppressComboEvent = false
@@ -45,7 +45,7 @@ class LiftReplayPanel(
   private var replayMode = false
   private var activeFile: String? = null
 
-  internal val loadedFrameCount: Int get() = replayService.frameCount
+  internal val loadedFrameCount: Int get() = replayer.frameCount
   internal val timelineFrameCount: Int get() = replayTimeline.frameCount
   internal val timelineHeight: Int get() = replayTimeline.height
 
@@ -64,7 +64,7 @@ class LiftReplayPanel(
       if (replayMode) return
 
       // 只列出当前电梯有帧的文件；共用日志里可能有其他电梯的数据。
-      val files = replayService.listFiles()
+      val files = replayer.listFiles()
       if (files.isEmpty()) {
         deactivate()
         JOptionPane.showMessageDialog(parentWindow(), "logs 下没有电梯 ${config.id} 的回放记录")
@@ -80,17 +80,17 @@ class LiftReplayPanel(
       suppressComboEvent = false
       replayFileCombo.isEnabled = true
 
-      replayService.onFrameChanged = { frames, index, clockTs -> onReplayFrame(frames, index, clockTs) }
+      replayer.onFrameChanged = { frames, index, clockTs -> onReplayFrame(frames, index, clockTs) }
       if (!loadReplayFile(defaultFile)) {
-        replayService.onFrameChanged = null
-        replayService.close()
+        replayer.onFrameChanged = null
+        replayer.close()
         onReplayStateChanged?.invoke(false)
         return
       }
       activeFile = defaultFile
       replayMode = true
       isVisible = true
-      onFrameRendered?.invoke(replayService.allFrames, replayService.currentPosition)
+      onFrameRendered?.invoke(replayer.allFrames, replayer.currentPosition)
       revalidate()
       doLayout()
       repaint()
@@ -104,8 +104,8 @@ class LiftReplayPanel(
   private fun deactivate() {
     replayMode = false
     activeFile = null
-    replayService.onFrameChanged = null
-    replayService.close()
+    replayer.onFrameChanged = null
+    replayer.close()
     JinBoEventBus.setReplayMode(config.id, false)
     isVisible = false
     showEmptyReplay("无回放数据")
@@ -173,7 +173,7 @@ class LiftReplayPanel(
       add(
         playbackRateCombo.apply {
           selectedItem = 1.0
-          addActionListener { replayService.setPlaybackRate(selectedItem as Double) }
+          addActionListener { replayer.setPlaybackRate(selectedItem as Double) }
         },
       )
       add(JLabel("当前时间:"))
@@ -186,7 +186,7 @@ class LiftReplayPanel(
 
   /** 加载指定回放文件到当前 replayer，刷新时间轴并停在首帧 */
   private fun loadReplayFile(fileName: String): Boolean {
-    val n = replayService.openFile(fileName)
+    val n = replayer.openFile(fileName)
     if (n == 0) {
       JOptionPane.showMessageDialog(parentWindow(), "$fileName 中没有电梯 ${config.id} 的回放帧")
       return false
@@ -196,8 +196,8 @@ class LiftReplayPanel(
     playPauseBtn.isEnabled = true
     playPauseBtn.text = "▶ 播放"
     replayTimeline.isEnabled = true
-    replayTimeline.setFrames(replayService.allFrames)
-    replayService.seekFirstFrame()
+    replayTimeline.setFrames(replayer.allFrames)
+    replayer.seekFirstFrame()
     return true
   }
 
@@ -213,8 +213,8 @@ class LiftReplayPanel(
   }
 
   private fun togglePlayPause() {
-    if (!isReplaying) return
-    if (replayService.playOrPause()) {
+    if (!replayer.isReplaying) return
+    if (replayer.playOrPause()) {
       playPauseBtn.text = "⏸ 暂停"
     } else {
       playPauseBtn.text = "▶ 播放"
@@ -223,7 +223,7 @@ class LiftReplayPanel(
 
   /** 相对当前虚拟时钟跳跃；重新计时，避免播放中下一 tick 仍按旧的毫秒偏移。 */
   private fun jumpReplayBy(offsetMs: Long) {
-    replayService.jumpBy(offsetMs)
+    replayer.jumpBy(offsetMs)
   }
 
   /**
@@ -238,7 +238,7 @@ class LiftReplayPanel(
     replayTimeline.setCurrent(clockTs)
     onFrameRendered?.invoke(frames, JinBoReplayPosition(index, clockTs))
     // 播放到末尾时，按钮回到“播放”
-    if (!replayService.isPlaying) {
+    if (!replayer.isPlaying) {
       playPauseBtn.text = "▶ 播放"
     }
   }

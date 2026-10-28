@@ -3,6 +3,7 @@ package org.dao.device.lift.jinbo.fe
 import com.fasterxml.jackson.module.kotlin.jacksonTypeRef
 import org.dao.device.common.GuiEventListener
 import org.dao.device.common.JsonHelper
+import org.dao.device.lift.jinbo.JinBoCommandService
 import org.dao.device.lift.jinbo.JinBoConfig
 import org.dao.device.lift.jinbo.JinBoServer
 import org.dao.device.lift.jinbo.event.LiftEvent
@@ -32,14 +33,14 @@ class JinBoConfigPanel(val config: JinBoConfig) :
 
     emergencyStopButton.margin = Insets(4, 10, 4, 10)
     emergencyStopButton.addActionListener {
-      JinBoServer.toggleEmergencyStop(config.id)
+      JinBoCommandService.toggleEmergencyStop(config.id)
       updateEmergencyStopButton(JinBoServer.lifts[config.id]?.emc == true)
     }
     add(emergencyStopButton)
 
     add(
       JButton("重置").apply {
-        addActionListener { JinBoServer.resetRequests(config.id) }
+        addActionListener { JinBoCommandService.resetRequests(config.id) }
       },
     )
 
@@ -155,7 +156,7 @@ class JinBoConfigPanel(val config: JinBoConfig) :
     }
 
     try {
-      JinBoServer.updateConfig(editedConfig)
+      JinBoCommandService.updateConfig(editedConfig)
     } catch (e: IllegalArgumentException) {
       JOptionPane.showMessageDialog(this, e.message ?: "电梯配置无效", "配置错误", JOptionPane.ERROR_MESSAGE)
       return
