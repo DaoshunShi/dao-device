@@ -82,11 +82,11 @@ class JinBoServerTest {
     withLift(runtime) {
       try {
         val req = JinBoReq(2, JinBoReqSource.InDoor)
-        assertEquals("0", JinBoBtnService.pressButton(LIFT_ID, req).code)
+        assertEquals("0", JinBoCommandService.pressButton(LIFT_ID, req).code)
         assertTrue(runtime.reqs.any { it.destFloor == 2 })
 
         val invalidReq = JinBoReq(3, JinBoReqSource.InDoor, doorCodes = listOf(9))
-        assertEquals("400", JinBoBtnService.pressButton(LIFT_ID, invalidReq).code)
+        assertEquals("400", JinBoCommandService.pressButton(LIFT_ID, invalidReq).code)
         assertTrue(runtime.reqs.none { it == invalidReq })
       } finally {
       }
@@ -101,10 +101,10 @@ class JinBoServerTest {
       try {
         JinBoEventBus.setReplayMode(LIFT_ID, true)
 
-        assertEquals("409", JinBoBtnService.pressButton(LIFT_ID, JinBoReq(2, JinBoReqSource.InDoor)).code)
-        assertEquals("409", JinBoBtnService.pressButton(LIFT_ID, JinBoReq(2, JinBoReqSource.OutDoor, JinBoLiftStatus.Down)).code)
-        assertEquals("409", JinBoBtnService.pressOpen(LIFT_ID).code)
-        assertEquals("409", JinBoBtnService.pressClose(LIFT_ID, fromTcp = true).code)
+        assertEquals("409", JinBoCommandService.pressButton(LIFT_ID, JinBoReq(2, JinBoReqSource.InDoor)).code)
+        assertEquals("409", JinBoCommandService.pressButton(LIFT_ID, JinBoReq(2, JinBoReqSource.OutDoor, JinBoLiftStatus.Down)).code)
+        assertEquals("409", JinBoCommandService.pressOpen(LIFT_ID).code)
+        assertEquals("409", JinBoCommandService.pressClose(LIFT_ID, fromTcp = true).code)
         assertTrue(runtime.reqs.isEmpty())
 
         assertEquals("0", JinBoCommandService.request(LIFT_ID, JinBoReq(2, JinBoReqSource.Tcp)).code)
@@ -121,7 +121,7 @@ class JinBoServerTest {
 
     withLift(runtime) {
       try {
-        JinBoBtnService.pressButton(LIFT_ID, JinBoReq(2, JinBoReqSource.InDoor))
+        JinBoCommandService.pressButton(LIFT_ID, JinBoReq(2, JinBoReqSource.InDoor))
         val returnedReq = runtime.reqs.single()
         assertEquals(listOf(0), returnedReq.doorCodes)
 
@@ -146,7 +146,7 @@ class JinBoServerTest {
 
     withLift(runtime) {
       try {
-        JinBoBtnService.pressButton(LIFT_ID, JinBoReq(2, JinBoReqSource.InDoor))
+        JinBoCommandService.pressButton(LIFT_ID, JinBoReq(2, JinBoReqSource.InDoor))
         runtime.reqs.clear()
         JinBoStateService.publishRequests(LIFT_ID, runtime.reqs)
 
@@ -542,7 +542,7 @@ class JinBoServerTest {
     withLift(runtime) {
       try {
         JinBoCommandService.request(LIFT_ID, JinBoReq(3, JinBoReqSource.Tcp, doorCodes = listOf(0, 1)))
-        JinBoBtnService.pressButton(LIFT_ID, JinBoReq(3, JinBoReqSource.InDoor))
+        JinBoCommandService.pressButton(LIFT_ID, JinBoReq(3, JinBoReqSource.InDoor))
         assertTrue(runtime.reqs.isNotEmpty())
 
         assertEquals("0", JinBoCommandService.resetRequests(LIFT_ID).code)

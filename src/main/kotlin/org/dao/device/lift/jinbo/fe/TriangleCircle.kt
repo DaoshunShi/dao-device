@@ -3,7 +3,7 @@ package org.dao.device.lift.jinbo.fe
 import com.fasterxml.jackson.module.kotlin.jacksonTypeRef
 import org.dao.device.common.GuiEventListener
 import org.dao.device.common.JsonHelper
-import org.dao.device.lift.jinbo.JinBoBtnService
+import org.dao.device.lift.jinbo.JinBoCommandService
 import org.dao.device.lift.jinbo.JinBoConfig
 import org.dao.device.lift.jinbo.JinBoLiftStatus
 import org.dao.device.lift.jinbo.JinBoReq
@@ -41,7 +41,7 @@ class TriangleCircle(
   }
 
   override fun onClick() {
-    JinBoBtnService.pressButton(
+    JinBoCommandService.pressButton(
       config.id,
       JinBoReq(floorIdx, JinBoReqSource.OutDoor, if (up) JinBoLiftStatus.Up else JinBoLiftStatus.Down),
     )

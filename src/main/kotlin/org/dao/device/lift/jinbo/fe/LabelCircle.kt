@@ -3,7 +3,7 @@ package org.dao.device.lift.jinbo.fe
 import com.fasterxml.jackson.module.kotlin.jacksonTypeRef
 import org.dao.device.common.GuiEventListener
 import org.dao.device.common.JsonHelper
-import org.dao.device.lift.jinbo.JinBoBtnService
+import org.dao.device.lift.jinbo.JinBoCommandService
 import org.dao.device.lift.jinbo.JinBoConfig
 import org.dao.device.lift.jinbo.JinBoReq
 import org.dao.device.lift.jinbo.JinBoReqSource
@@ -36,7 +36,7 @@ class LabelCircle(
   }
 
   override fun onClick() {
-    JinBoBtnService.pressButton(config.id, JinBoReq(floorIdx, source))
+    JinBoCommandService.pressButton(config.id, JinBoReq(floorIdx, source))
   }
 
   override fun paintComponent(g: Graphics) {

@@ -8,7 +8,6 @@ import org.dao.device.lift.jinbo.JinBoFrame
 import org.dao.device.lift.jinbo.JinBoConfig
 import org.dao.device.lift.jinbo.JinBoDoorStatus
 import org.dao.device.lift.jinbo.JinBoLiftStatus
-import org.dao.device.lift.jinbo.JinBoLogService
 import org.dao.device.lift.jinbo.JinBoServer
 import org.dao.device.lift.jinbo.event.LiftEvent
 import java.awt.BorderLayout

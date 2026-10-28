@@ -1,7 +1,10 @@
 package org.dao.device.lift.jinbo
 
 import org.dao.device.common.JsonHelper
+import org.dao.device.lift.jinbo.event.LiftEvent
 import org.slf4j.LoggerFactory
+import java.awt.GraphicsEnvironment
+import javax.swing.SwingUtilities
 import java.util.concurrent.ConcurrentHashMap
 import java.util.concurrent.CopyOnWriteArrayList
 import java.util.concurrent.Executors
@@ -28,9 +31,17 @@ object JinBoRecorder {
   // liftId -> 上一写入帧的去重快照
   private val lastKey: MutableMap<String, Snapshot> = ConcurrentHashMap()
 
+  /** 记录并显示一条电梯事件日志。 */
+  fun logEvent(liftId: String, event: LiftEvent) {
+    bufferLog(liftId, "${event.topic}:${event.msg}")
+    if (GraphicsEnvironment.isHeadless()) return
+    val frame = JinBoServer.lifts[liftId]?.frame ?: return
+    SwingUtilities.invokeLater { frame.logEvent(event) }
+  }
+
   /**
    * 缓冲一条事件日志，等待下一次 capture 归入当前帧。
-   * 由 JinBoLogService / LiftFrame.logEvent 调用。
+   * 由 LiftFrame.logEvent 和 JinBoRecorder.logEvent 调用。
    */
   fun bufferLog(liftId: String, line: String) {
     logBuf.getOrPut(liftId) { CopyOnWriteArrayList() }.add(line)

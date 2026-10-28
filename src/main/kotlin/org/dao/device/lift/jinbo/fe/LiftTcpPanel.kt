@@ -1,6 +1,6 @@
 package org.dao.device.lift.jinbo.fe
 
-import org.dao.device.lift.jinbo.JinBoBtnService
+import org.dao.device.lift.jinbo.JinBoCommandService
 import org.dao.device.lift.jinbo.JinBoConfig
 import org.dao.device.lift.jinbo.enabledFloors
 import org.dao.device.lift.jinbo.JinBoReqSource
@@ -28,7 +28,7 @@ class LiftTcpPanel(config: JinBoConfig) : JPanel() {
     add(
       JButton("关门").apply {
         addActionListener {
-          JinBoBtnService.pressClose(config.id, fromTcp = true)
+          JinBoCommandService.pressClose(config.id, fromTcp = true)
         }
       },
     )

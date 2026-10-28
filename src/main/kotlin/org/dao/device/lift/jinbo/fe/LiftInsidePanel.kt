@@ -2,7 +2,7 @@ package org.dao.device.lift.jinbo.fe
 
 import org.dao.device.lift.jinbo.JinBoConfig
 import org.dao.device.lift.jinbo.enabledFloors
-import org.dao.device.lift.jinbo.JinBoBtnService
+import org.dao.device.lift.jinbo.JinBoCommandService
 import org.dao.device.lift.jinbo.JinBoReqSource
 import java.awt.BorderLayout
 import java.awt.GridLayout
@@ -29,14 +29,14 @@ class LiftInsidePanel(config: JinBoConfig) : JPanel() {
     add(
       JButton("开门").apply {
         addActionListener {
-          JinBoBtnService.pressOpen(config.id)
+          JinBoCommandService.pressOpen(config.id)
         }
       },
     )
     add(
       JButton("关门").apply {
         addActionListener {
-          JinBoBtnService.pressClose(config.id)
+          JinBoCommandService.pressClose(config.id)
         }
       },
     )
