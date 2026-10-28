@@ -25,7 +25,6 @@ object JinBoDoorService {
     val targets = doorCodes.distinct().ifEmpty { listOf(0) }.map { code ->
       lift.doors.firstOrNull { it.code == code } ?: return "门号 $code 不存在"
     }
-    if (targets.isEmpty()) return "电梯没有可打开的门"
     targets.forEach { it.startOpening(openedAt) }
     return null
   }

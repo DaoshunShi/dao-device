@@ -16,8 +16,4 @@ object JinBoLogService {
     SwingUtilities.invokeLater { frame.logEvent(event) }
   }
 
-  fun captureFrame(lift: JinBoRuntime) {
-    JinBoRecorder.capture(lift)
-  }
-
 }

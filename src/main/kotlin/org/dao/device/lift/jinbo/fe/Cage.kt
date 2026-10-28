@@ -7,6 +7,7 @@ import org.dao.device.lift.jinbo.JinBoConfig
 import org.dao.device.lift.jinbo.JinBoDoor
 import org.dao.device.lift.jinbo.JinBoDoorStatus
 import org.dao.device.lift.jinbo.event.LiftEvent
+import org.slf4j.LoggerFactory
 import java.awt.Color
 import java.awt.Font
 import java.awt.Graphics
@@ -30,6 +31,7 @@ class Cage(
   private var status = status0
   private var doors: List<JinBoDoor> = listOf(JinBoDoor(code = 0, status = status0))
   private var carWidth: Int = lw // 梯厢宽度随门数动态调整
+  private val logger = LoggerFactory.getLogger(javaClass)
   private val maxHeight: Double
   private val minHeight: Double
 
@@ -58,22 +60,17 @@ class Cage(
    */
   private fun calculateHPosition(): Int {
     if (height <= 0) {
-      // println("[Cage DEBUG] Panel height is 0, cannot calculate position")
       return 0 // 面板未初始化
     }
 
     val heightRange = maxHeight - minHeight
     if (heightRange <= 0) {
-      // println("[Cage DEBUG] Height range is $heightRange (min: $minHeight, max: $maxHeight)")
       return 0
     }
 
     // 将电梯高度归一化到 [0, 1] 范围
     val normalizedHeight = (elevatorHeightMeters - minHeight) / heightRange
     val pixelPosition = round(normalizedHeight * (height - lh)).toInt().coerceIn(0, height - lh)
-
-    // 调试输出
-    // println("[Cage DEBUG] calculateHPosition: height=$height, lh=$lh, elevatorHeight=$elevatorHeightMeters, normalized=$normalizedHeight, pixelPos=$pixelPosition")
 
     // 转换为面板中的位置（从底部开始）
     // 注意：面板坐标原点在左上角，所以需要从底部计算
@@ -197,8 +194,6 @@ class Cage(
         val map: Map<String, Any> = JsonHelper.mapper.readValue(event.msg, jacksonTypeRef())
         // JsonHelper 按字段类型反序列化，height 为 Double，同时兼容手工状态/回放数据中的整数高度。
         val elevatorHeight = (map["h"] as Number).toDouble()
-        // 调试输出
-        // println("[Cage DEBUG] Received elevator height: $elevatorHeight meters, minHeight: $minHeight, maxHeight: $maxHeight")
         updateHeight(elevatorHeight)
         status = JinBoDoorStatus.valueOf(map["doorStatus"] as String)
         val rawDoors = map["doors"] as? List<*>
@@ -210,8 +205,7 @@ class Cage(
         carWidth = maxOf(lw, preferredCarWidth())
         repaint()
       } catch (e: Exception) {
-        println("[Cage ERROR] Failed to process liftState event: ${e.message}")
-        e.printStackTrace()
+        logger.warn("[Cage] Failed to process liftState event: ${e.message}", e)
       }
     }
   }

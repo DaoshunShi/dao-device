@@ -10,26 +10,9 @@ import java.util.concurrent.Executors
 import java.util.concurrent.Future
 
 /**
- * 仿真金博电梯
+ * 仿真金博电梯。
  *
- * 暂定：只实现单部电梯的控制，不实现电梯组
- * 暂定：电梯移动的最小时间单位是秒
- * 判断电梯是否在某一层：curFloor = 1 && liftStatus !in [Up, Down]
- * 电梯到达下一层的条件：当前时间 - moveStartOn >= costPerFloor
- * TODO 基于电梯高度计算当前楼层
- *
- * 配置：
- * - 电梯 ID
- * - 总楼层，每层的 label (map)
- * - 上升/下降一层楼需要的时间
- * - 开门关门需要的时间
- * - 开门维持的时间
- * 运行状态
- * - 电梯目前的目标楼层
- *   - 外部按的 -> 不显示在电梯内
- *   - 内部按的 + tcp 请求的 -> 显示在电梯内
- * - 电梯到达顶层、底层后，清理所有目标楼层
- *
+ * 支持按高度推进电梯、多门开关门、TCP/HTTP 呼梯、回放记录与页面监控。
  */
 object JinBoServer {
   private val logger = LoggerFactory.getLogger(javaClass)
@@ -128,12 +111,8 @@ object JinBoServer {
 
     JinBoStateService.publish(lr)
     // 急停期间也录制一帧，保证时间轴连续
-    JinBoLogService.captureFrame(lr)
+    JinBoRecorder.capture(lr)
   }
-
-  /** 梯外呼梯仅在电梯本次运行方向上有效；未指定方向的旧请求保持兼容。 */
-  private fun matchesTravelDirection(lr: JinBoRuntime, req: JinBoReq): Boolean =
-    JinBoDirection.arrivalMatches(lr.config, req, lr.direction)
 
   /**
    * 请求电梯到指定楼层
@@ -161,7 +140,7 @@ object JinBoServer {
             if (lift.reqs.none { it == resolvedReq }) {
               lift.reqs.add(resolvedReq)
             }
-            if (req.destFloor == lift.curFloor && matchesTravelDirection(lift, resolvedReq)) {
+            if (req.destFloor == lift.curFloor && JinBoDirection.arrivalMatches(lift.config, resolvedReq, lift.direction)) {
               // 同层呼梯也先进入请求队列；只有目标门真正打开后才算完成并清理。
               JinBoDoorService.refreshSameFloorTimer(lift, resolvedReq.doorCodes)
             }

@@ -111,9 +111,8 @@ class LiftFrame(val config: JinBoConfig) : JFrame("JinBo Lift Monitor"), GuiEven
     Timer(JinBoConstants.SIMULATION_INTERVAL_MS.toInt()) {
       // 回放模式下暂停实时拉取，界面由 replayer 驱动
       if (JinBoEventBus.isReplayMode(config.id)) return@Timer
-      val str = JinBoFetcher.fetch(config.id)
-      // TODO 开关
       if (showLiftStatus) {
+        val str = JinBoFetcher.fetch(config.id)
         logEvent(LiftEvent("${config.id}-状态", str))
       }
     }.apply { start() }

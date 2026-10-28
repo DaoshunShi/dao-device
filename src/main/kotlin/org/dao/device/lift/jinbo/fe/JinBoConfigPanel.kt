@@ -7,11 +7,6 @@ import org.dao.device.lift.jinbo.JinBoConfig
 import org.dao.device.lift.jinbo.JinBoServer
 import org.dao.device.lift.jinbo.event.LiftEvent
 import java.awt.*
-import java.awt.event.ActionEvent
-import java.awt.event.ActionListener
-import java.beans.PropertyChangeEvent
-import java.beans.PropertyChangeListener
-import java.util.function.Consumer
 import javax.swing.*
 
 class JinBoConfigPanel(val config: JinBoConfig) :
@@ -70,76 +65,60 @@ class JinBoConfigPanel(val config: JinBoConfig) :
 
     // 管理楼层按钮（始终显示）
     val manageFloorsButton = JButton("管理楼层")
-    manageFloorsButton.addActionListener(ActionListener { e: ActionEvent? -> showFloorConfigDialog() })
+    manageFloorsButton.addActionListener { showFloorConfigDialog() }
     add(manageFloorsButton)
 
     // 编辑按钮（查看状态显示）
     val editButton = JButton("编辑")
-    editButton.addActionListener(ActionListener { e: ActionEvent? -> enterEditMode() })
+    editButton.addActionListener { enterEditMode() }
     add(editButton)
 
     // 保存按钮（编辑状态显示）
     val saveButton = JButton("保存")
-    saveButton.addActionListener(ActionListener { e: ActionEvent? -> saveConfig() })
+    saveButton.addActionListener { saveConfig() }
     saveButton.isVisible = false // 初始隐藏
     add(saveButton)
 
     // 取消按钮（编辑状态显示）
     val cancelButton = JButton("取消")
-    cancelButton.addActionListener(ActionListener { e: ActionEvent? -> exitEditMode() })
+    cancelButton.addActionListener { exitEditMode() }
     cancelButton.isVisible = false // 初始隐藏
     add(cancelButton)
 
     // 初始化定时器
-    configUpdateTimer = Timer(3000, ActionListener { e: ActionEvent? -> updateConfig() })
+    configUpdateTimer = Timer(3000) { updateConfig() }
     configUpdateTimer.isRepeats = true
     configUpdateTimer.start()
 
-    // 保存按钮引用
-    val finalSaveButton = saveButton
-    val finalCancelButton = cancelButton
-    val finalEditButton = editButton
-
     // 状态切换逻辑
-    addPropertyChangeListener(
-      "editMode",
-      PropertyChangeListener { evt: PropertyChangeEvent? ->
-        if (java.lang.Boolean.TRUE == evt!!.getNewValue()) {
-          // 进入编辑状态
-          finalEditButton.isVisible = false
-          finalSaveButton.isVisible = true
-          finalCancelButton.isVisible = true
+    addPropertyChangeListener("editMode") { evt ->
+      if (java.lang.Boolean.TRUE == evt.newValue) {
+        // 进入编辑状态
+        editButton.isVisible = false
+        saveButton.isVisible = true
+        cancelButton.isVisible = true
 
-          // 启用所有输入框
-          fieldInputs.values.forEach(
-            Consumer { field: JTextField ->
-              field.isEditable = true
-              field.background = Color.WHITE
-            },
-          )
-        } else {
-          // 退出编辑状态
-          finalEditButton.isVisible = true
-          finalSaveButton.isVisible = false
-          finalCancelButton.isVisible = false
-
-          // 禁用所有输入框
-          fieldInputs.values.forEach(
-            Consumer { field: JTextField ->
-              field.isEditable = false
-              field.background = readOnlyBackground // 使用更浅的灰色
-            },
-          )
+        // 启用所有输入框
+        fieldInputs.values.forEach { field ->
+          field.isEditable = true
+          field.background = Color.WHITE
         }
-      },
-    )
+      } else {
+        // 退出编辑状态
+        editButton.isVisible = true
+        saveButton.isVisible = false
+        cancelButton.isVisible = false
+
+        // 禁用所有输入框
+        fieldInputs.values.forEach { field ->
+          field.isEditable = false
+          field.background = readOnlyBackground
+        }
+      }
+    }
 
     // 初始设置查看状态的背景色
-    fieldInputs.values.forEach(
-      Consumer { field: JTextField ->
-        field.background = readOnlyBackground // 使用更浅的灰色
-      },
-    )
+    fieldInputs.values.forEach { field -> field.background = readOnlyBackground }
 
     JinBoEventBus.register(config.id, this)
     updateEmergencyStopButton(JinBoServer.lifts[config.id]?.emc == true)
@@ -159,12 +138,6 @@ class JinBoConfigPanel(val config: JinBoConfig) :
 
   // 保存配置
   private fun saveConfig() {
-    // 打印所有输入框的值
-    println("当前配置:")
-    fieldInputs.forEach { (configField, field) ->
-      println("${configField.label}: ${field.text}")
-    }
-
     // 这里可以添加保存到配置文件的逻辑
     // 例如: saveConfigToFile();
     val editedConfig = try {
@@ -190,9 +163,6 @@ class JinBoConfigPanel(val config: JinBoConfig) :
       return
     }
 
-    // 配置数量变化后，让当前正在显示的梯厢立即按新门数布局。
-    JinBoFetcher.fetch(config.id)
-
     updateConfig()
 
     // 退出编辑模式
@@ -202,12 +172,7 @@ class JinBoConfigPanel(val config: JinBoConfig) :
   // 更新配置（定时调用）
   private fun updateConfig() {
     if (!isEditMode) {
-      // 这里可以添加从配置文件或服务读取最新配置的逻辑
-      // 例如: Map<String, String> latestConfig = loadLatestConfig();
-
-      // 模拟更新配置
       fieldInputs.forEach { (configField, field) -> field.text = configField.value(config).toString() }
-      // logTcpInput?.isSelected = config.logTcp
     }
   }
 
