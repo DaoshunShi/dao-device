@@ -93,9 +93,6 @@ object JinBoServer {
       // 按高度和已启用楼层定位当前层，避免外部刚更新 curFloor/h 时仍用旧楼层做到站判定。
       JinBoMoveService.syncCurrentFloor(lr)
       if (lr.emc) {
-        JinBoStateService.publish(lr)
-        // 急停期间也录制一帧，保证时间轴连续
-        JinBoLogService.captureFrame(lr)
         return
       }
 
@@ -127,12 +124,11 @@ object JinBoServer {
       }
 
       JinBoMoveService.arrive(lr)
-
-      // 在同一个 tick 内取出状态和请求快照，避免界面线程再次获取电梯锁。
-      JinBoStateService.publish(lr)
-      // 录制本 tick 的状态快照
-      JinBoLogService.captureFrame(lr)
     }
+
+    JinBoStateService.publish(lr)
+    // 急停期间也录制一帧，保证时间轴连续
+    JinBoLogService.captureFrame(lr)
   }
 
   /** 梯外呼梯仅在电梯本次运行方向上有效；未指定方向的旧请求保持兼容。 */
