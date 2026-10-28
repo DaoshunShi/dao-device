@@ -170,6 +170,7 @@ object JinBoBtnService {
   }
 
   fun fireFrame(liftId: String, frame: JinBoFrame) {
+    replaceButtons(liftId, frame.buttons)
     fireButtons(liftId, frame.buttons, realtime = false)
     fireRequests(liftId, frame.reqs, realtime = false)
   }
@@ -203,6 +204,11 @@ object JinBoBtnService {
   }
 
   fun buttons(liftId: String): List<JinBoButton> = pressedButtons[liftId]?.toList().orEmpty()
+
+  /** 切换到回放帧按钮状态；回放控件统一从该状态绘制。 */
+  fun replaceButtons(liftId: String, buttons: List<JinBoButton>) {
+    pressedButtons[liftId] = CopyOnWriteArrayList(buttons)
+  }
 
   /** 按钮绘制只读取当前服务状态，不依赖可能延迟到达的事件快照。 */
   fun isInsideActive(liftId: String, floor: Int): Boolean =

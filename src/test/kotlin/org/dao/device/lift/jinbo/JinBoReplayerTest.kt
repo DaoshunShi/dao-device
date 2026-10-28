@@ -233,6 +233,41 @@ class JinBoReplayerTest {
   }
 
   @Test
+  fun `replay frame updates button state used by panel drawing`() {
+    val frame = JinBoFrame(
+      liftId = LIFT_ID,
+      ts = 1_000L,
+      curFloor = 2,
+      h = 3.0,
+      liftStatus = JinBoLiftStatus.Idle,
+      doorStatus = JinBoDoorStatus.OPEN,
+      emergencyStopped = false,
+      buttons = listOf(
+        JinBoButton("LiftOutsidePanel", 2, JinBoLiftStatus.Up, "呼梯", 900L),
+        JinBoButton("LiftInsidePanel", 2, null, "呼梯", 910L),
+        JinBoButton("LiftTcpPanel", 3, null, "呼梯", 920L),
+      ),
+      reqs = JinBoRequestEntries(),
+      logs = emptyList(),
+    )
+    withReplayFile(FILE_NAME, fileNamePattern = "replay-replayer-test.log", frames = listOf(frame)) {
+      val replay = JinBoReplayService(LIFT_ID)
+      try {
+        replay.openFile("replay-replayer-test.log")
+        replay.seekFirstFrame()
+        SwingUtilities.invokeAndWait { }
+
+        assertTrue(JinBoBtnService.isOutsideActive(LIFT_ID, 2, up = true))
+        assertTrue(JinBoBtnService.isInsideActive(LIFT_ID, 2))
+        assertTrue(JinBoBtnService.isTcpActive(LIFT_ID, 3))
+      } finally {
+        replay.close()
+        JinBoBtnService.reset(LIFT_ID)
+      }
+    }
+  }
+
+  @Test
   fun `failed replay switch keeps the active replay and replay mode`() {
     withReplayFile(FILE_NAME, listOf(1_000L), fileNamePattern = "replay-replayer-test.log") {
       val emptyFile = File("logs", "replay-empty-test.log").apply { writeText("") }
