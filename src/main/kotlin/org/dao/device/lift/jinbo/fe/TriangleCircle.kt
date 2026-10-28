@@ -41,7 +41,7 @@ class TriangleCircle(
   }
 
   override fun onClick() {
-    JinBoBtnService.pressButtonLater(
+    JinBoBtnService.pressButton(
       config.id,
       JinBoReq(floorIdx, JinBoReqSource.OutDoor, if (up) JinBoLiftStatus.Up else JinBoLiftStatus.Down),
     )

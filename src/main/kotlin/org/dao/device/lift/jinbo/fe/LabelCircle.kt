@@ -29,7 +29,7 @@ class LabelCircle(private val config: JinBoConfig, val floorIdx: Int, val labelS
   }
 
   override fun onClick() {
-    JinBoBtnService.pressButtonLater(config.id, JinBoReq(floorIdx, JinBoReqSource.InDoor))
+    JinBoBtnService.pressButton(config.id, JinBoReq(floorIdx, JinBoReqSource.InDoor))
   }
 
   override fun paintComponent(g: Graphics) {

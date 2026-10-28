@@ -17,15 +17,15 @@ object JinBoBtnService {
     return request(liftId, req)
   }
 
-  /** GUI 点击入口；请求直接入队，随后由请求队列刷新按钮高亮。 */
-  fun pressButtonLater(liftId: String, req: JinBoReq) {
-    pressButton(liftId, req)
-  }
-
   private fun logCallPress(liftId: String, req: JinBoReq) {
+    val direction = when (req.type) {
+      JinBoLiftStatus.Up -> ", 方向=上行"
+      JinBoLiftStatus.Down -> ", 方向=下行"
+      else -> ""
+    }
     JinBoLogService.logEvent(
       liftId,
-      LiftEvent("按钮按下", "电梯=$liftId, 面板=${req.source.panelName}, 楼层=${req.destFloor}${directionText(req.type)}"),
+      LiftEvent("按钮按下", "电梯=$liftId, 面板=${req.source.panelName}, 楼层=${req.destFloor}$direction"),
     )
   }
 
@@ -65,34 +65,29 @@ object JinBoBtnService {
     val response = JinBoServer.request(liftId, req)
     if (response.code == "0") {
       JinBoLogService.logEvent(liftId, LiftEvent(req.source.name, JsonHelper.writeValueAsString(req)))
-      refreshRequests(liftId)
+      refreshFromRuntime(liftId)
     }
     return response
   }
 
   /** 实时运行时刷新请求队列。 */
-  fun refresh(liftId: String, reqs: List<JinBoReq>) = updateRequests(liftId, reqs)
-
-  /** 请求入队后立即刷新 reqs，不等待下一次仿真 tick。 */
-  private fun refreshRequests(liftId: String) {
-    val lift = JinBoServer.lifts[liftId] ?: return
-    // 请求队列使用 CopyOnWriteArrayList，直接读取时无需等待 processLift 的电梯锁。
-    val reqs = lift.reqs.toList()
-    updateRequests(liftId, reqs)
+  fun refresh(liftId: String, reqs: List<JinBoReq>) {
+    val entries = reqs.map { JinBoRequestEntry(it) }
+    fire(liftId, buttons = entries, reqs = entries, realtime = true)
   }
 
-  private fun updateRequests(liftId: String, reqs: List<JinBoReq>) {
-    val entries = reqs.map { req -> JinBoRequestEntry(req) }
-    fireButtons(liftId, entries, realtime = true)
-    fireRequests(liftId, entries, realtime = true)
+  /** 请求入队后立即刷新 reqs，不等待下一次仿真 tick。 */
+  private fun refreshFromRuntime(liftId: String) {
+    val lift = JinBoServer.lifts[liftId] ?: return
+    // 请求队列使用 CopyOnWriteArrayList，直接读取时无需等待 processLift 的电梯锁。
+    refresh(liftId, lift.reqs.toList())
   }
 
   fun fireFrame(liftId: String, frame: JinBoFrame) {
-    fireButtons(liftId, frame.buttons, realtime = false)
-    fireRequests(liftId, frame.reqs, realtime = false)
+    fire(liftId, buttons = frame.buttons, reqs = frame.reqs, realtime = false)
   }
 
-  private fun fireButtons(liftId: String, buttons: List<JinBoRequestEntry>, realtime: Boolean) {
+  private fun fire(liftId: String, buttons: List<JinBoRequestEntry>, reqs: List<JinBoRequestEntry>, realtime: Boolean) {
     val active = buttons.filter { it.active }
     val outside = active.filter { it.panel == "LiftOutsidePanel" }.map { it.req }
     val inside = active.filter { it.panel == "LiftInsidePanel" && it.action == "呼梯" }.map { it.req }
@@ -101,22 +96,9 @@ object JinBoBtnService {
     fire(liftId, LiftEvent("outside", JsonHelper.mapper.writeValueAsString(outside)))
     fire(liftId, LiftEvent("inside", JsonHelper.mapper.writeValueAsString(inside)))
     fire(liftId, LiftEvent("tcp", JsonHelper.mapper.writeValueAsString(tcp)))
-  }
-
-  private fun fireRequests(liftId: String, entries: List<JinBoRequestEntry>, realtime: Boolean) {
-    val fire = if (realtime) JinBoEventBus::fireRealtime else JinBoEventBus::fire
-    fire(liftId, LiftEvent("reqs", JsonHelper.mapper.writeValueAsString(entries)))
-  }
-
-  private fun directionText(direction: JinBoLiftStatus?): String = when (direction) {
-    JinBoLiftStatus.Up -> ", 方向=上行"
-    JinBoLiftStatus.Down -> ", 方向=下行"
-    else -> ""
+    fire(liftId, LiftEvent("reqs", JsonHelper.mapper.writeValueAsString(reqs)))
   }
 
   /** 清空呼梯请求及其按钮高亮。 */
-  fun clearRequests(liftId: String) {
-    fireButtons(liftId, emptyList(), realtime = true)
-    fireRequests(liftId, emptyList(), realtime = true)
-  }
+  fun clearRequests(liftId: String) = refresh(liftId, emptyList())
 }
