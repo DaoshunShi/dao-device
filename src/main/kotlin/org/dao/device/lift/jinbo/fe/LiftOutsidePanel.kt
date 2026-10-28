@@ -1,6 +1,7 @@
 package org.dao.device.lift.jinbo.fe
 
 import org.dao.device.lift.jinbo.JinBoConfig
+import org.dao.device.lift.jinbo.enabledFloors
 import java.awt.BorderLayout
 import java.awt.Color
 import java.awt.Dimension
@@ -15,9 +16,7 @@ class LiftOutsidePanel(config: JinBoConfig) : JPanel(BorderLayout()) {
 
   init {
     // 获取启用的楼层并按索引降序排列（顶层在上）
-    val enabledFloors = config.floors
-      .filter { !it.disabled }
-      .sortedByDescending { it.index }
+    val enabledFloors = config.enabledFloors()
     val topHeight = enabledFloors.maxOf { it.height }
     val bottomHeight = enabledFloors.minOf { it.height }
 

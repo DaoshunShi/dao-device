@@ -52,6 +52,9 @@ data class JinBoFloor(
   val disabled: Boolean = false, // 此层电梯停用
 )
 
+/** 电梯面板常用的启用楼层列表：过滤停用层，并按楼层索引从高到低排列。 */
+fun JinBoConfig.enabledFloors(): List<JinBoFloor> = floors.filter { !it.disabled }.sortedByDescending { it.index }
+
 // -----------------------------------------------------------------------------
 // 电梯状态、方向与门状态
 // -----------------------------------------------------------------------------
@@ -224,6 +227,10 @@ data class JinBoDoor(
     opStartOn = opStartOn?.let { Date(it.time + offsetMs) }
   }
 }
+
+/** 聚合多扇门状态：取显示优先级最高的门状态，用于兼容旧的单门状态展示。 */
+fun aggregateDoorStatus(doors: List<JinBoDoor>): JinBoDoorStatus =
+  doors.minByOrNull { it.status.displayPriority }?.status ?: JinBoDoorStatus.CLOSE
 
 /** 单扇门推进所需的开门、关门和自动关门延迟配置。 */
 data class JinBoDoorConfig(

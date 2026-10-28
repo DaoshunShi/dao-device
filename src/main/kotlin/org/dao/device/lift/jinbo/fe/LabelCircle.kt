@@ -18,8 +18,15 @@ import java.awt.RenderingHints
 /**
  * 圆形内套文本，用于电梯内去指定楼层
  */
-class LabelCircle(private val config: JinBoConfig, val floorIdx: Int, val labelStr: String, val circleR: Int, val labelSize: Int) :
-  ClickAnimatedPanel(),
+class LabelCircle(
+  private val config: JinBoConfig,
+  val floorIdx: Int,
+  val labelStr: String,
+  val circleR: Int,
+  val labelSize: Int,
+  private val source: JinBoReqSource,
+  private val eventTopic: String,
+) : ClickAnimatedPanel(),
   GuiEventListener {
 
   private var active = false
@@ -29,7 +36,7 @@ class LabelCircle(private val config: JinBoConfig, val floorIdx: Int, val labelS
   }
 
   override fun onClick() {
-    JinBoBtnService.pressButton(config.id, JinBoReq(floorIdx, JinBoReqSource.InDoor))
+    JinBoBtnService.pressButton(config.id, JinBoReq(floorIdx, source))
   }
 
   override fun paintComponent(g: Graphics) {
@@ -65,7 +72,7 @@ class LabelCircle(private val config: JinBoConfig, val floorIdx: Int, val labelS
   }
 
   override fun onEvent(event: LiftEvent) {
-    if (event.topic != "inside") return
+    if (event.topic != eventTopic) return
     val reqs = JsonHelper.mapper.readValue(event.msg, jacksonTypeRef<List<JinBoReq>>())
     active = reqs.any { it.destFloor == floorIdx }
     repaint()

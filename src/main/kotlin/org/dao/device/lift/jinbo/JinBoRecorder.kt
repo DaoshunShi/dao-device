@@ -87,7 +87,4 @@ object JinBoRecorder {
     }
   }
 
-  /** 兼容旧帧字段：状态不一致时优先保留异常和门动作。 */
-  private fun aggregateDoorStatus(doors: List<JinBoDoor>): JinBoDoorStatus =
-    doors.minByOrNull { it.status.displayPriority }?.status ?: JinBoDoorStatus.CLOSE
 }

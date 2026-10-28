@@ -59,9 +59,6 @@ object JinBoStateService {
     if (realtime) JinBoEventBus.fireRealtime(liftId, event) else JinBoEventBus.fire(liftId, event)
   }
 
-  private fun aggregateDoorStatus(doors: List<JinBoDoor>): JinBoDoorStatus =
-    doors.minByOrNull { it.status.displayPriority }?.status ?: JinBoDoorStatus.CLOSE
-
   private data class LiftState(
     val h: Double,
     val liftStatus: JinBoLiftStatus,
