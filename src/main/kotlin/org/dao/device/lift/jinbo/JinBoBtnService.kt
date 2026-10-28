@@ -21,6 +21,7 @@ object JinBoBtnService {
 
   /** 面板按钮先高亮，再提交请求；提交失败时撤销高亮。 */
   fun pressButton(liftId: String, req: JinBoReq): JinBoResp {
+    if (JinBoEventBus.isReplayMode(liftId)) return JinBoResp("409", "回放状态下禁止页面呼梯")
     val button = JinBoButton(
       panel = req.source.panelName,
       floor = req.destFloor,
@@ -46,6 +47,7 @@ object JinBoBtnService {
 
   /** GUI 点击专用：EDT 只登记点击反馈，耗时的请求提交交给单线程队列串行执行。 */
   fun pressButtonLater(liftId: String, req: JinBoReq) {
+    if (JinBoEventBus.isReplayMode(liftId)) return
     val button = JinBoButton(
       panel = req.source.panelName,
       floor = req.destFloor,
@@ -76,15 +78,19 @@ object JinBoBtnService {
   fun pressOutDoor(liftId: String, floor: Int, direction: JinBoLiftStatus): JinBoResp =
     pressButton(liftId, JinBoReq(floor, JinBoReqSource.OutDoor, direction))
 
-  fun pressOpen(liftId: String): JinBoResp = pressControl(liftId, "LiftInsidePanel", "开门") {
-    val lift = JinBoServer.lifts[liftId] ?: return@pressControl JinBoResp("404", "$liftId 电梯不存在")
-    JinBoServer.open(liftId, emptyList()).also {
-      if (it.code == "0") JinBoLogService.logEvent(liftId, LiftEvent("in-open", "destFloor=${lift.curFloor}"))
+  fun pressOpen(liftId: String): JinBoResp {
+    if (JinBoEventBus.isReplayMode(liftId)) return JinBoResp("409", "回放状态下禁止页面开门")
+    return pressControl(liftId, "LiftInsidePanel", "开门") {
+      val lift = JinBoServer.lifts[liftId] ?: return@pressControl JinBoResp("404", "$liftId 电梯不存在")
+      JinBoServer.open(liftId, emptyList()).also {
+        if (it.code == "0") JinBoLogService.logEvent(liftId, LiftEvent("in-open", "destFloor=${lift.curFloor}"))
+      }
     }
   }
 
   /** 关门不区分门号；[fromTcp] 仅用于日志中的按钮位置。 */
   fun pressClose(liftId: String, fromTcp: Boolean = false): JinBoResp {
+    if (JinBoEventBus.isReplayMode(liftId)) return JinBoResp("409", "回放状态下禁止页面关门")
     val panel = if (fromTcp) "LiftTcpPanel" else "LiftInsidePanel"
     return pressControl(liftId, panel, "关门") {
       JinBoServer.close(liftId).also {

@@ -1,6 +1,7 @@
 package org.dao.device.lift.jinbo
 
 import org.dao.device.common.JsonHelper
+import org.dao.device.lift.jinbo.fe.JinBoEventBus
 import org.junit.jupiter.api.Test
 import java.io.File
 import java.util.Date
@@ -92,6 +93,30 @@ class JinBoServerTest {
         assertFalse(invalidButton.active)
         assertTrue(runtime.reqs.none { it == invalidReq })
       } finally {
+        JinBoBtnService.reset(LIFT_ID)
+      }
+    }
+  }
+
+  @Test
+  fun `replay blocks page requests but keeps tcp and http requests alive`() {
+    val runtime = newRuntime(initialFloor = 3)
+
+    withLift(runtime) {
+      try {
+        JinBoEventBus.setReplayMode(LIFT_ID, true)
+
+        assertEquals("409", JinBoBtnService.pressButton(LIFT_ID, JinBoReq(2, JinBoReqSource.InDoor)).code)
+        assertEquals("409", JinBoBtnService.pressOutDoor(LIFT_ID, 2, JinBoLiftStatus.Down).code)
+        assertEquals("409", JinBoBtnService.pressOpen(LIFT_ID).code)
+        assertEquals("409", JinBoBtnService.pressClose(LIFT_ID, fromTcp = true).code)
+        assertTrue(runtime.reqs.isEmpty())
+        assertTrue(JinBoBtnService.buttons(LIFT_ID).isEmpty())
+
+        assertEquals("0", JinBoServer.request(LIFT_ID, JinBoReq(2, JinBoReqSource.Tcp)).code)
+        assertTrue(runtime.reqs.any { it.destFloor == 2 })
+      } finally {
+        JinBoEventBus.setReplayMode(LIFT_ID, false)
         JinBoBtnService.reset(LIFT_ID)
       }
     }

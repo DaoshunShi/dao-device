@@ -76,12 +76,8 @@ class JinBoReplayService(private val liftId: String) {
     replayer?.seek(ts)
   }
 
-  fun rewind() {
-    replayer?.rewind()
-  }
-
-  fun fastForward() {
-    replayer?.fastForward()
+  fun setPlaybackRate(rate: Double) {
+    replayer?.setPlaybackRate(rate)
   }
 
   fun dispose() {

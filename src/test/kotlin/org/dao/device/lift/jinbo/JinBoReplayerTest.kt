@@ -104,16 +104,15 @@ class JinBoReplayerTest {
   }
 
   @Test
-  fun `loading another file resets playback to forward speed`() {
+  fun `loading another file resets playback rate to one`() {
     withReplayFile(FILE_NAME, listOf(1_000L, 2_000L), fileNamePattern = "replay-replayer-test.log") {
       val replay = JinBoReplayer(LIFT_ID)
       replay.load("replay-replayer-test.log")
-      replay.rewind()
+      replay.setPlaybackRate(20.0)
 
       replay.load("replay-replayer-test.log")
 
       assertEquals(1_000L, replay.currentTs)
-      replay.fastForward()
       val changes = mutableListOf<Long>()
       replay.onFrameChanged = { _, _, clockTs -> changes.add(clockTs) }
       SwingUtilities.invokeAndWait { replay.play() }
@@ -122,6 +121,26 @@ class JinBoReplayerTest {
         while (changes.isEmpty() && System.currentTimeMillis() < deadline) {
           Thread.sleep(20)
         }
+        assertEquals(1_500L, changes.first())
+      } finally {
+        SwingUtilities.invokeAndWait { replay.pause() }
+      }
+    }
+  }
+
+  @Test
+  fun `playback rate changes only virtual time step`() {
+    withReplayFile(FILE_NAME, listOf(1_000L, 6_000L, 11_000L)) {
+      val replay = JinBoReplayer(LIFT_ID)
+      replay.load(FILE_NAME)
+      val changes = mutableListOf<Long>()
+      replay.onFrameChanged = { _, _, clockTs -> changes.add(clockTs) }
+      replay.setPlaybackRate(2.0)
+
+      SwingUtilities.invokeAndWait { replay.play() }
+      try {
+        val deadline = System.currentTimeMillis() + 2_000L
+        while (changes.isEmpty() && System.currentTimeMillis() < deadline) Thread.sleep(20)
         assertEquals(2_000L, changes.first())
       } finally {
         SwingUtilities.invokeAndWait { replay.pause() }

@@ -9,7 +9,7 @@ import java.awt.event.MouseEvent
 import javax.swing.JPanel
 import javax.swing.Timer
 
-/** 自定义楼层按钮的点击动画：按下时缩小并高亮，松开后立即恢复。 */
+/** 自定义楼层按钮的点击动画：按下时缩小并高亮，松开后立即恢复；禁用时不响应点击。 */
 abstract class ClickAnimatedPanel : JPanel() {
   private var pressed = false
   private var releaseTimer: Timer? = null
@@ -19,10 +19,11 @@ abstract class ClickAnimatedPanel : JPanel() {
     addMouseListener(object : MouseAdapter() {
       override fun mousePressed(e: MouseEvent) {
         if (e.button != MouseEvent.BUTTON1) return
+        if (!isEnabled) return
+        onClick()
         setPressed(true)
         startReleaseTimer()
         // 应用切换后 mouseClicked 可能丢失；mousePressed 是更可靠的左键点击入口。
-        onClick()
       }
 
       override fun mouseReleased(e: MouseEvent) {

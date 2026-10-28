@@ -9,7 +9,7 @@ import javax.swing.Timer
  *
  * 职责：
  * - 读取 logs/replay*.log 的 JSONL 帧，按 liftId 过滤、按 ts 升序，构建帧序列。
- * - 维护当前帧指针；2fps 播放，支持快进/快退、seek。
+ * - 维护当前帧指针；按 2fps 的基准节奏和可配置倍率播放，支持 seek。
  * - 通过 onFrameChanged 报告当前帧，回放事件由 JinBoReplayService 转换。
  *
  * 说明：录制侧做了去重（相邻相同状态不落帧），故帧序列是稀疏的。
@@ -22,6 +22,7 @@ class JinBoReplayer(private val liftId: String) {
   companion object {
     private const val LOG_DIR = "logs"
     private const val BASE_STEP_MS = 500L // 每帧推进的虚拟时间
+    private const val DEFAULT_PLAYBACK_RATE = 1.0
 
     /**
      * 列出包含指定电梯帧的回放文件，按最后修改时间升序；新文件排在最后。
@@ -56,7 +57,7 @@ class JinBoReplayer(private val liftId: String) {
 
   private var frames: List<JinBoFrame> = emptyList()
   private var clockTs: Long = 0 // 虚拟时钟（毫秒），回放按真实时间推进
-  private var speed = 1 // 步进倍率：正数快进，负数快退，1 = 正常（每 tick ±0.5 秒）
+  private var playbackRate = DEFAULT_PLAYBACK_RATE
   private var timer: Timer? = null
 
   /**
@@ -107,11 +108,16 @@ class JinBoReplayer(private val liftId: String) {
 
     frames = parsed.sortedBy { it.ts }
     clockTs = firstTs
-    speed = 1
+    playbackRate = DEFAULT_PLAYBACK_RATE
     return frames.size
   }
 
-  /** 开始/继续播放：每 500ms 将虚拟时钟前进/后退 500ms × |speed|。 */
+  /** 设置播放倍率；小于等于 0 的值回退到默认的 1 倍速。 */
+  fun setPlaybackRate(rate: Double) {
+    playbackRate = if (rate > 0) rate else DEFAULT_PLAYBACK_RATE
+  }
+
+  /** 开始/继续播放：每 500ms 将虚拟时钟前进 500ms × playbackRate。 */
   fun play() {
     if (frames.isEmpty()) return
     stopTimer()
@@ -122,24 +128,6 @@ class JinBoReplayer(private val liftId: String) {
   /** 暂停播放（保留虚拟时钟位置） */
   fun pause() {
     stopTimer()
-  }
-
-  /** 快进：提升正向步进倍率（1→2→4→8） */
-  fun fastForward() {
-    speed = when {
-      speed <= 0 -> 1
-      speed < 8 -> speed * 2
-      else -> 8
-    }
-  }
-
-  /** 快退：转为反向步进（-1→-2→-4→-8） */
-  fun rewind() {
-    speed = when {
-      speed >= 0 -> -1
-      speed > -8 -> speed * 2
-      else -> -8
-    }
   }
 
   /** 跳转虚拟时钟到 ts（限定在录制范围内），渲染对应帧 */
@@ -163,9 +151,9 @@ class JinBoReplayer(private val liftId: String) {
     clockTs = 0
   }
 
-  /** 每 500ms 推进虚拟时钟（快进/快退改变倍率和方向）。 */
+  /** 每 500ms 按播放倍率推进虚拟时钟。 */
   private fun tick() {
-    val stepMs = BASE_STEP_MS * kotlin.math.abs(speed) * if (speed >= 0) 1 else -1
+    val stepMs = (BASE_STEP_MS * playbackRate).toLong()
     val next = clockTs + stepMs
     when {
       next <= firstTs -> {

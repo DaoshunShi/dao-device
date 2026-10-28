@@ -12,6 +12,8 @@ import org.dao.device.lift.jinbo.JinBoServer
 import org.dao.device.lift.jinbo.event.LiftEvent
 import java.awt.BorderLayout
 import java.awt.Color
+import java.awt.Component
+import java.awt.Container
 import java.awt.Dimension
 import java.awt.Font
 import java.awt.GridLayout
@@ -83,8 +85,26 @@ class LiftFrame(val config: JinBoConfig) : JFrame("JinBo Lift Monitor"), GuiEven
       onShowLiftStatusChanged = { showLiftStatus = it },
     )
     replayPanel = LiftReplayPanel(config = config, parentWindow = { this })
+    replayPanel.onReplayStateChanged { setLiftControlsEnabled(!it) }
     eventLogPanel.attachReplayPanel(replayPanel)
     add(eventLogPanel, BorderLayout.SOUTH)
+  }
+
+  /** 回放期间禁止整页呼梯、开门和关门控件；TCP/HTTP 请求不经过页面控件。 */
+  private fun setLiftControlsEnabled(enabled: Boolean) {
+    listOf(LiftOutsidePanel::class.java, LiftInsidePanel::class.java, LiftTcpPanel::class.java).forEach { type ->
+      findComponents(this, type).forEach { setEnabledRecursively(it, enabled) }
+    }
+  }
+
+  private fun setEnabledRecursively(component: Component, enabled: Boolean) {
+    component.isEnabled = enabled
+    if (component is Container) component.components.forEach { setEnabledRecursively(it, enabled) }
+  }
+
+  private fun <T : Component> findComponents(component: Component, type: Class<T>): List<T> {
+    val found = if (type.isInstance(component)) listOf(type.cast(component)) else emptyList()
+    return if (component is Container) found + component.components.flatMap { findComponents(it, type) } else found
   }
 
   private fun setupScheduler() {

@@ -18,8 +18,10 @@ import javax.swing.JOptionPane
 import javax.swing.JPanel
 import javax.swing.SwingUtilities
 
+private val PLAYBACK_RATES = arrayOf(0.2, 0.5, 1.0, 2.0, 3.0, 5.0, 10.0, 20.0)
+
 /**
- * 回放控制行：上排为文件选择、播放/暂停、跳转、快退/快进和当前时间，下排为时间轴。
+ * 回放控制行：上排为文件选择、播放/暂停、跳转、播放倍速和当前时间，下排为时间轴。
  *
  * 开启时接管帧驱动，关闭时释放回放器；窗口调度器通过事件总线判断回放状态。
  */
@@ -36,6 +38,7 @@ class LiftReplayPanel(
   private val replayTimeLabel = JLabel("--:--:--")
   private val replayTimeline = ReplayTimeline { ts -> replayService.seek(ts) }
   private val replayFileCombo = JComboBox<String>()
+  private val playbackRateCombo = JComboBox<Double>(PLAYBACK_RATES)
   private var suppressComboEvent = false
   private var onReplayStateChanged: ((Boolean) -> Unit)? = null
   private var onFrameRendered: ((List<JinBoFrame>, JinBoReplayPosition) -> Unit)? = null
@@ -115,6 +118,7 @@ class LiftReplayPanel(
     replayTimeline.setEmptyMessage(message)
     replayTimeline.setFrames(emptyList())
     replayTimeline.isEnabled = false
+    playbackRateCombo.isEnabled = false
     replayTimeLabel.text = "--:--:--"
   }
 
@@ -127,9 +131,7 @@ class LiftReplayPanel(
     onFrameRendered = callback
   }
 
-  /**
-   * 构建回放控制行：上排（文件下拉 | 播放/暂停 | 快退 | 快进 | 时间标签）NORTH，时间轴 CENTER（占满整行）。
-   */
+  /** 构建回放控制行：上排（文件下拉 | 播放/暂停 | 时间跳转 | 播放倍速 | 时间标签）NORTH，时间轴 CENTER。 */
   private fun buildControlRow() {
     val buttonRow = JPanel(FlowLayout(FlowLayout.LEFT, 5, 0)).apply {
       add(JLabel("日志文件:"))
@@ -167,14 +169,11 @@ class LiftReplayPanel(
           addActionListener { jumpReplayBy(10_000L) }
         },
       )
+      add(JLabel("倍速:"))
       add(
-        JButton("⏪ 快退").apply {
-          addActionListener { replayService.rewind() }
-        },
-      )
-      add(
-        JButton("⏩ 快进").apply {
-          addActionListener { replayService.fastForward() }
+        playbackRateCombo.apply {
+          selectedItem = 1.0
+          addActionListener { replayService.setPlaybackRate(selectedItem as Double) }
         },
       )
       add(JLabel("当前时间:"))
@@ -193,6 +192,7 @@ class LiftReplayPanel(
       return false
     }
     replayFileCombo.isEnabled = true
+    playbackRateCombo.isEnabled = true
     playPauseBtn.isEnabled = true
     playPauseBtn.text = "▶ 播放"
     replayTimeline.isEnabled = true
