@@ -159,9 +159,9 @@ class JinBoReplayerTest {
       doorStatus = JinBoDoorStatus.OPEN,
       emergencyStopped = false,
       reqs = JinBoRequestEntries(listOf(
-        JinBoRequestEntry(JinBoReq(3, JinBoReqSource.OutDoor, JinBoLiftStatus.Up, listOf(0)), 900L),
-        JinBoRequestEntry(JinBoReq(4, JinBoReqSource.InDoor, doorCodes = listOf(1)), 950L),
-        JinBoRequestEntry(JinBoReq(5, JinBoReqSource.Tcp, doorCodes = listOf(0)), 975L),
+        JinBoRequestEntry(JinBoReq(3, JinBoReqSource.OutDoor, JinBoLiftStatus.Up, listOf(0))),
+        JinBoRequestEntry(JinBoReq(4, JinBoReqSource.InDoor, doorCodes = listOf(1))),
+        JinBoRequestEntry(JinBoReq(5, JinBoReqSource.Tcp, doorCodes = listOf(0))),
       )),
       logs = listOf("request-start:test"),
       doors = listOf(JinBoDoor(0, JinBoDoorStatus.OPEN), JinBoDoor(1, JinBoDoorStatus.CLOSE)),
@@ -195,7 +195,7 @@ class JinBoReplayerTest {
           events[4].msg,
           com.fasterxml.jackson.module.kotlin.jacksonTypeRef(),
         )
-        assertEquals(listOf(900L, 950L, 975L), entries.map { it.queuedAt })
+        assertEquals(listOf(3, 4, 5), entries.map { it.req.destFloor })
       } finally {
         replay.close()
         JinBoEventBus.listener[LIFT_ID]?.remove(listener)
@@ -214,10 +214,10 @@ class JinBoReplayerTest {
       doorStatus = JinBoDoorStatus.OPEN,
       emergencyStopped = false,
       buttons = listOf(
-        JinBoRequestEntry(JinBoReq(2, JinBoReqSource.InDoor), 900L),
-        JinBoRequestEntry(JinBoReq(0, JinBoReqSource.InDoor), 950L).copy(action = "关门"),
+        JinBoRequestEntry(JinBoReq(2, JinBoReqSource.InDoor)),
+        JinBoRequestEntry(JinBoReq(0, JinBoReqSource.InDoor)).copy(action = "关门"),
       ),
-      reqs = JinBoRequestEntries(listOf(JinBoRequestEntry(JinBoReq(5, JinBoReqSource.Tcp), 975L))),
+      reqs = JinBoRequestEntries(listOf(JinBoRequestEntry(JinBoReq(5, JinBoReqSource.Tcp)))),
       logs = emptyList(),
     )
     withReplayFile(FILE_NAME, fileNamePattern = "replay-replayer-test.log", frames = listOf(frame)) {
@@ -262,9 +262,9 @@ class JinBoReplayerTest {
       doorStatus = JinBoDoorStatus.OPEN,
       emergencyStopped = false,
       buttons = listOf(
-        JinBoRequestEntry(JinBoReq(2, JinBoReqSource.OutDoor, JinBoLiftStatus.Up), 900L),
-        JinBoRequestEntry(JinBoReq(2, JinBoReqSource.InDoor), 910L),
-        JinBoRequestEntry(JinBoReq(3, JinBoReqSource.Tcp), 920L),
+        JinBoRequestEntry(JinBoReq(2, JinBoReqSource.OutDoor, JinBoLiftStatus.Up)),
+        JinBoRequestEntry(JinBoReq(2, JinBoReqSource.InDoor)),
+        JinBoRequestEntry(JinBoReq(3, JinBoReqSource.Tcp)),
       ),
       reqs = JinBoRequestEntries(),
       logs = emptyList(),
@@ -605,7 +605,6 @@ class JinBoReplayerTest {
     )
 
     assertEquals(listOf(JinBoReq(5, JinBoReqSource.Tcp)), frame.reqs.map { it.req })
-    assertEquals(listOf(0L), frame.reqs.map { it.queuedAt })
   }
 
   private fun withReplayFile(

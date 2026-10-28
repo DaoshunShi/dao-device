@@ -116,26 +116,11 @@ data class JinBoReq(
 
 /** 按钮和请求队列共用的记录；[active] 表示呼梯按钮当前是否仍亮起。 */
 data class JinBoRequestEntry(
-  val destFloor: Int,
-  val source: JinBoReqSource = JinBoReqSource.Tcp,
-  val type: JinBoLiftStatus? = null,
-  val doorCodes: List<Int> = emptyList(),
-  val queuedAt: Long = 0L,
+  val req: JinBoReq,
   val action: String = "呼梯",
-  val pressedAt: Long = queuedAt,
   val active: Boolean = true,
-  val panel: String = source.panelName,
-) {
-  val req: JinBoReq get() = JinBoReq(destFloor, source, type, doorCodes)
-
-  constructor(req: JinBoReq, queuedAt: Long) : this(
-    destFloor = req.destFloor,
-    source = req.source,
-    type = req.type,
-    doorCodes = req.doorCodes,
-    queuedAt = queuedAt,
-  )
-}
+  val panel: String = req.source.panelName,
+)
 
 /** 兼容旧回放中直接保存的 JinBoReq 列表。 */
 @JsonDeserialize(using = JinBoRequestEntriesDeserializer::class)
@@ -147,8 +132,18 @@ class JinBoRequestEntriesDeserializer : JsonDeserializer<JinBoRequestEntries>() 
   override fun deserialize(p: JsonParser, ctxt: DeserializationContext): JinBoRequestEntries =
     JinBoRequestEntries(
       p.readValueAsTree<JsonNode>().map { node ->
-        if (node.has("queuedAt")) ctxt.readTreeAsValue(node, JinBoRequestEntry::class.java)
-        else JinBoRequestEntry(ctxt.readTreeAsValue(node, JinBoReq::class.java), 0L)
+        val reqNode = node.get("req") ?: node
+        val req = ctxt.readTreeAsValue(reqNode, JinBoReq::class.java)
+        if (node.has("action") || node.has("active") || node.has("panel")) {
+          JinBoRequestEntry(
+            req = req,
+            action = node.get("action")?.textValue() ?: "呼梯",
+            active = node.get("active")?.booleanValue() ?: true,
+            panel = node.get("panel")?.textValue() ?: req.source.panelName,
+          )
+        } else {
+          JinBoRequestEntry(req)
+        }
       },
     )
 }

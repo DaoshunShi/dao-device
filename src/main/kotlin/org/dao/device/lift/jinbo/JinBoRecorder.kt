@@ -47,7 +47,7 @@ object JinBoRecorder {
   fun capture(lr: JinBoRuntime) {
     val liftId = lr.config.id
     val buttons = JinBoBtnService.buttons(liftId)
-    val reqs = requestEntries(liftId, lr.reqs.toList(), System.currentTimeMillis())
+    val reqs = JinBoRequestEntries(lr.reqs.map { JinBoRequestEntry(it) })
     val doors = lr.doors.map { it.copy() }
     val logs = logBuf.remove(liftId).orEmpty().toList()
 
@@ -90,9 +90,4 @@ object JinBoRecorder {
   /** 兼容旧帧字段：状态不一致时优先保留异常和门动作。 */
   private fun aggregateDoorStatus(doors: List<JinBoDoor>): JinBoDoorStatus =
     doors.minByOrNull { it.status.displayPriority }?.status ?: JinBoDoorStatus.CLOSE
-
-  private fun requestEntries(liftId: String, reqs: List<JinBoReq>, capturedAt: Long): JinBoRequestEntries {
-    val known = JinBoBtnService.requests(liftId).associateBy { it.req }
-    return JinBoRequestEntries(reqs.map { req -> known[req] ?: JinBoRequestEntry(req, capturedAt) })
-  }
 }

@@ -9,7 +9,6 @@ import java.util.concurrent.ConcurrentHashMap
 object JinBoBtnService {
   private val replayButtons: MutableMap<String, List<JinBoRequestEntry>> = ConcurrentHashMap()
   private val realtimeRequests: MutableMap<String, List<JinBoRequestEntry>> = ConcurrentHashMap()
-  private val queuedAt: MutableMap<String, MutableMap<JinBoReq, Long>> = ConcurrentHashMap()
 
   /** TCP/HTTP 请求没有实体按钮，只记录请求队列。 */
   fun press(liftId: String, req: JinBoReq): JinBoResp = request(liftId, req)
@@ -27,10 +26,9 @@ object JinBoBtnService {
   }
 
   private fun logCallPress(liftId: String, req: JinBoReq) {
-    val button = JinBoRequestEntry(req, queuedAt = 0L)
     JinBoLogService.logEvent(
       liftId,
-      LiftEvent("按钮按下", "电梯=$liftId, 面板=${button.panel}, 楼层=${button.destFloor}${directionText(button.type)}"),
+      LiftEvent("按钮按下", "电梯=$liftId, 面板=${req.source.panelName}, 楼层=${req.destFloor}${directionText(req.type)}"),
     )
   }
 
@@ -87,10 +85,7 @@ object JinBoBtnService {
   }
 
   private fun updateRequests(liftId: String, reqs: List<JinBoReq>) {
-    val times = queuedAt.getOrPut(liftId) { ConcurrentHashMap() }
-    val now = System.currentTimeMillis()
-    val entries = reqs.map { req -> JinBoRequestEntry(req, times.getOrPut(req) { now }) }
-    times.keys.retainAll(reqs.toSet())
+    val entries = reqs.map { req -> JinBoRequestEntry(req) }
     realtimeRequests[liftId] = entries
     fireButtons(liftId, entries, realtime = true)
     fireRequests(liftId, entries, realtime = true)
@@ -131,15 +126,18 @@ object JinBoBtnService {
 
   /** 按钮绘制只读取当前服务状态，不依赖可能延迟到达的事件快照。 */
   fun isInsideActive(liftId: String, floor: Int): Boolean =
-    buttons(liftId).any { it.panel == "LiftInsidePanel" && it.destFloor == floor && it.type == null && it.action == "呼梯" && it.active }
+    buttons(liftId).any {
+      it.panel == "LiftInsidePanel" && it.req.destFloor == floor && it.req.type == null && it.action == "呼梯" && it.active
+    }
 
   fun isTcpActive(liftId: String, floor: Int): Boolean =
-    buttons(liftId).any { it.panel == "LiftTcpPanel" && it.destFloor == floor && it.action == "呼梯" && it.active }
+    buttons(liftId).any { it.panel == "LiftTcpPanel" && it.req.destFloor == floor && it.action == "呼梯" && it.active }
 
   fun isOutsideActive(liftId: String, floor: Int, up: Boolean): Boolean {
     val direction = if (up) JinBoLiftStatus.Up else JinBoLiftStatus.Down
     return buttons(liftId).any {
-      it.panel == "LiftOutsidePanel" && it.destFloor == floor && it.type == direction && it.action == "呼梯" && it.active
+      it.panel == "LiftOutsidePanel" && it.req.destFloor == floor && it.req.type == direction &&
+        it.action == "呼梯" && it.active
     }
   }
 
@@ -148,14 +146,12 @@ object JinBoBtnService {
   fun reset(liftId: String) {
     replayButtons.remove(liftId)
     realtimeRequests.remove(liftId)
-    queuedAt.remove(liftId)
   }
 
   /** 清空呼梯请求及其按钮高亮。 */
   fun clearRequests(liftId: String) {
     replayButtons.remove(liftId)
     realtimeRequests.remove(liftId)
-    queuedAt.remove(liftId)
     fireButtons(liftId, emptyList(), realtime = true)
     fireRequests(liftId, emptyList(), realtime = true)
   }

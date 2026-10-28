@@ -1,7 +1,6 @@
 package org.dao.device.lift.jinbo.fe
 
 import com.fasterxml.jackson.module.kotlin.jacksonTypeRef
-import org.apache.commons.lang3.time.DateFormatUtils
 import org.dao.device.common.GuiEventListener
 import org.dao.device.common.JsonHelper
 import org.dao.device.lift.jinbo.JinBoBtnService
@@ -9,7 +8,6 @@ import org.dao.device.lift.jinbo.JinBoConfig
 import org.dao.device.lift.jinbo.JinBoRequestEntry
 import org.dao.device.lift.jinbo.event.LiftEvent
 import java.awt.BorderLayout
-import java.util.Date
 import javax.swing.JPanel
 import javax.swing.JScrollPane
 import javax.swing.JTextArea
@@ -43,12 +41,7 @@ class LiftReqsPanel(private val config: JinBoConfig) : JPanel(BorderLayout()), G
       entries.joinToString("\n") { entry ->
         val req = entry.req
         val floorLabel = config.floors.firstOrNull { it.index == req.destFloor }?.label ?: req.destFloor.toString()
-        val queuedAt = if (entry.queuedAt > 0) {
-          DateFormatUtils.format(Date(entry.queuedAt), "HH:mm:ss.SSS")
-        } else {
-          "--:--:--.---"
-        }
-        "$queuedAt | $floorLabel | " +
+        "$floorLabel | " +
           "${req.source.name} | ${req.type?.name ?: "Idle"} | " +
           "门=${req.doorCodes.ifEmpty { listOf(0) }.joinToString(",")}"
       }
