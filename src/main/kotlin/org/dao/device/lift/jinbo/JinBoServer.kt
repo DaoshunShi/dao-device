@@ -65,7 +65,7 @@ object JinBoServer {
    */
   fun updateConfig(cfg: JinBoConfig) {
     lifts[cfg.id]?.let { lift ->
-      synchronized(lift) {
+      withLiftLock(lift, "JinBoServer.updateConfig") {
         lift.updateConfig(cfg)
       }
     }
@@ -89,7 +89,7 @@ object JinBoServer {
    * 处理电梯
    */
   fun processLift(lr: JinBoRuntime) {
-    synchronized(lr) {
+    withLiftLock(lr, "JinBoServer.processLift") {
       // 按高度和已启用楼层定位当前层，避免外部刚更新 curFloor/h 时仍用旧楼层做到站判定。
       JinBoMoveService.syncCurrentFloor(lr)
       if (lr.emc) {
@@ -150,7 +150,10 @@ object JinBoServer {
       LiftEvent("request-start", "hash=${req.hashCode()}, req=$reqJson"),
     )
     val response = try {
-      synchronized(lift) {
+      withLiftLock(
+        lift,
+        "JinBoServer.request, hash=${req.hashCode()}, destFloor=${req.destFloor}, source=${req.source}",
+      ) {
         if (lift.emc) {
           JinBoResp("409", EMERGENCY_STOP_MSG)
         } else {
@@ -190,7 +193,7 @@ object JinBoServer {
   /** 独立开门指令：打开指定门，空列表表示打开默认 0 号门。 */
   fun open(liftId: String, doorCodes: List<Int>): JinBoResp {
     val lift = mustGetLift(liftId)
-    synchronized(lift) {
+    withLiftLock(lift, "JinBoServer.open, doorCodes=$doorCodes") {
       if (lift.emc) {
         return JinBoResp("409", EMERGENCY_STOP_MSG)
       }
@@ -208,7 +211,7 @@ object JinBoServer {
    */
   fun close(liftId: String): JinBoResp {
     val lr = mustGetLift(liftId)
-    synchronized(lr) {
+    withLiftLock(lr, "JinBoServer.close") {
       if (lr.emc) {
         return JinBoResp("409", EMERGENCY_STOP_MSG)
       }
@@ -220,7 +223,7 @@ object JinBoServer {
 
   fun emergencyStop(liftId: String): JinBoResp {
     val lr = mustGetLift(liftId)
-    synchronized(lr) {
+    withLiftLock(lr, "JinBoServer.emergencyStop") {
       if (lr.emc) {
         return JinBoResp()
       }
@@ -233,7 +236,7 @@ object JinBoServer {
 
   fun releaseEmergencyStop(liftId: String): JinBoResp {
     val lr = mustGetLift(liftId)
-    synchronized(lr) {
+    withLiftLock(lr, "JinBoServer.releaseEmergencyStop") {
       if (!lr.emc) {
         return JinBoResp()
       }
@@ -255,7 +258,7 @@ object JinBoServer {
 
   fun toggleEmergencyStop(liftId: String): JinBoResp {
     val lr = mustGetLift(liftId)
-    synchronized(lr) {
+    withLiftLock(lr, "JinBoServer.toggleEmergencyStop") {
       return if (lr.emc) releaseEmergencyStop(liftId) else emergencyStop(liftId)
     }
   }
@@ -263,7 +266,7 @@ object JinBoServer {
   /** 清空所有呼梯请求；电梯仍会完成已开始的行程，避免停在楼层之间。 */
   fun resetRequests(liftId: String): JinBoResp {
     val lift = mustGetLift(liftId)
-    synchronized(lift) {
+    withLiftLock(lift, "JinBoServer.resetRequests") {
       lift.reqs.clear()
     }
     JinBoBtnService.clearRequests(liftId)
@@ -276,7 +279,7 @@ object JinBoServer {
    */
   fun status(liftId: String): JinBoStatusResp {
     val lift = mustGetLift(liftId)
-    return synchronized(lift) {
+    return withLiftLock(lift, "JinBoServer.status") {
       JinBoStatusResp(
         currentFloor = lift.curFloor.toString(),
         doorStatus = lift.doors.firstOrNull { it.status != JinBoDoorStatus.CLOSE }?.status
@@ -290,7 +293,18 @@ object JinBoServer {
     }
   }
 
-  fun getLifts(): List<JinBoRuntime> = lifts.values.toList()
-
   private fun mustGetLift(liftId: String): JinBoRuntime = lifts[liftId] ?: throw RuntimeException("$liftId 电梯不存在")
+
+  private inline fun <T> withLiftLock(lift: JinBoRuntime, remark: String, block: () -> T): T {
+    val startedAt = System.currentTimeMillis()
+    return synchronized(lift) {
+      block()
+    }.also {
+      logger.info(
+        "JinBoServer lock lift=${lift.config.id}, remark=$remark, " +
+          "curFloor=${lift.curFloor}, status=${lift.liftStatus}, direction=${lift.direction}, " +
+          "elapsedMs=${System.currentTimeMillis() - startedAt}",
+      )
+    }
+  }
 }
