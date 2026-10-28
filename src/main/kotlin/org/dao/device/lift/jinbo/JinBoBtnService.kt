@@ -7,8 +7,8 @@ import java.util.concurrent.ConcurrentHashMap
 
 /** 电梯按钮与请求队列：呼梯请求入队后，按钮高亮直接从请求队列派生。 */
 object JinBoBtnService {
-  private val replayButtons: MutableMap<String, List<JinBoButton>> = ConcurrentHashMap()
-  private val requestEntries: MutableMap<String, List<JinBoRequestEntry>> = ConcurrentHashMap()
+  private val replayButtons: MutableMap<String, List<JinBoRequestEntry>> = ConcurrentHashMap()
+  private val realtimeRequests: MutableMap<String, List<JinBoRequestEntry>> = ConcurrentHashMap()
   private val queuedAt: MutableMap<String, MutableMap<JinBoReq, Long>> = ConcurrentHashMap()
 
   /** TCP/HTTP 请求没有实体按钮，只记录请求队列。 */
@@ -27,16 +27,10 @@ object JinBoBtnService {
   }
 
   private fun logCallPress(liftId: String, req: JinBoReq) {
-    val button = JinBoButton(
-      panel = req.source.panelName,
-      floor = req.destFloor,
-      direction = req.type,
-      action = "呼梯",
-      pressedAt = System.currentTimeMillis(),
-    )
+    val button = JinBoRequestEntry(req, queuedAt = 0L)
     JinBoLogService.logEvent(
       liftId,
-      LiftEvent("按钮按下", "电梯=$liftId, 面板=${button.panel}, 楼层=${button.floor}${directionText(button.direction)}"),
+      LiftEvent("按钮按下", "电梯=$liftId, 面板=${button.panel}, 楼层=${button.destFloor}${directionText(button.type)}"),
     )
   }
 
@@ -93,21 +87,14 @@ object JinBoBtnService {
   }
 
   private fun updateRequests(liftId: String, reqs: List<JinBoReq>) {
-    val now = System.currentTimeMillis()
     val times = queuedAt.getOrPut(liftId) { ConcurrentHashMap() }
+    val now = System.currentTimeMillis()
     val entries = reqs.map { req -> JinBoRequestEntry(req, times.getOrPut(req) { now }) }
     times.keys.retainAll(reqs.toSet())
-    requestEntries[liftId] = entries
-    fireButtons(liftId, entries.map { it.req.toButton(it.queuedAt) }, realtime = true)
+    realtimeRequests[liftId] = entries
+    fireButtons(liftId, entries, realtime = true)
     fireRequests(liftId, entries, realtime = true)
   }
-
-  private val JinBoReqSource.panelName: String
-    get() = when (this) {
-      JinBoReqSource.OutDoor -> "LiftOutsidePanel"
-      JinBoReqSource.InDoor -> "LiftInsidePanel"
-      JinBoReqSource.Tcp -> "LiftTcpPanel"
-    }
 
   fun fireFrame(liftId: String, frame: JinBoFrame) {
     replayButtons[liftId] = frame.buttons
@@ -115,11 +102,11 @@ object JinBoBtnService {
     fireRequests(liftId, frame.reqs, realtime = false)
   }
 
-  private fun fireButtons(liftId: String, buttons: List<JinBoButton>, realtime: Boolean) {
+  private fun fireButtons(liftId: String, buttons: List<JinBoRequestEntry>, realtime: Boolean) {
     val active = buttons.filter { it.active }
-    val outside = active.filter { it.panel == "LiftOutsidePanel" }.map { it.toReq() }
-    val inside = active.filter { it.panel == "LiftInsidePanel" && it.action == "呼梯" }.map { it.toReq() }
-    val tcp = active.filter { it.panel == "LiftTcpPanel" }.map { it.toReq() }
+    val outside = active.filter { it.panel == "LiftOutsidePanel" }.map { it.req }
+    val inside = active.filter { it.panel == "LiftInsidePanel" && it.action == "呼梯" }.map { it.req }
+    val tcp = active.filter { it.panel == "LiftTcpPanel" }.map { it.req }
     val fire = if (realtime) JinBoEventBus::fireRealtime else JinBoEventBus::fire
     fire(liftId, LiftEvent("outside", JsonHelper.mapper.writeValueAsString(outside)))
     fire(liftId, LiftEvent("inside", JsonHelper.mapper.writeValueAsString(inside)))
@@ -131,12 +118,6 @@ object JinBoBtnService {
     fire(liftId, LiftEvent("reqs", JsonHelper.mapper.writeValueAsString(entries)))
   }
 
-  private fun JinBoButton.toReq(): JinBoReq = JinBoReq(
-    destFloor = floor ?: 0,
-    source = JinBoReqSource.entries.firstOrNull { it.panelName == panel } ?: JinBoReqSource.Tcp,
-    type = direction,
-  )
-
   private fun directionText(direction: JinBoLiftStatus?): String = when (direction) {
     JinBoLiftStatus.Up -> ", 方向=上行"
     JinBoLiftStatus.Down -> ", 方向=下行"
@@ -144,44 +125,36 @@ object JinBoBtnService {
   }
 
   /** 回放帧提供自己的按钮状态；实时运行时则从请求队列派生。 */
-  fun buttons(liftId: String): List<JinBoButton> =
+  fun buttons(liftId: String): List<JinBoRequestEntry> =
     if (JinBoEventBus.isReplayMode(liftId)) replayButtons[liftId].orEmpty()
-    else requests(liftId).map { it.req.toButton(it.queuedAt) }
-
-  private fun JinBoReq.toButton(pressedAt: Long): JinBoButton = JinBoButton(
-    panel = source.panelName,
-    floor = destFloor,
-    direction = type,
-    action = "呼梯",
-    pressedAt = pressedAt,
-  )
+    else requests(liftId)
 
   /** 按钮绘制只读取当前服务状态，不依赖可能延迟到达的事件快照。 */
   fun isInsideActive(liftId: String, floor: Int): Boolean =
-    buttons(liftId).any { it.panel == "LiftInsidePanel" && it.floor == floor && it.direction == null && it.action == "呼梯" && it.active }
+    buttons(liftId).any { it.panel == "LiftInsidePanel" && it.destFloor == floor && it.type == null && it.action == "呼梯" && it.active }
 
   fun isTcpActive(liftId: String, floor: Int): Boolean =
-    buttons(liftId).any { it.panel == "LiftTcpPanel" && it.floor == floor && it.action == "呼梯" && it.active }
+    buttons(liftId).any { it.panel == "LiftTcpPanel" && it.destFloor == floor && it.action == "呼梯" && it.active }
 
   fun isOutsideActive(liftId: String, floor: Int, up: Boolean): Boolean {
     val direction = if (up) JinBoLiftStatus.Up else JinBoLiftStatus.Down
     return buttons(liftId).any {
-      it.panel == "LiftOutsidePanel" && it.floor == floor && it.direction == direction && it.action == "呼梯" && it.active
+      it.panel == "LiftOutsidePanel" && it.destFloor == floor && it.type == direction && it.action == "呼梯" && it.active
     }
   }
 
-  fun requests(liftId: String): List<JinBoRequestEntry> = requestEntries[liftId].orEmpty()
+  fun requests(liftId: String): List<JinBoRequestEntry> = realtimeRequests[liftId].orEmpty()
 
   fun reset(liftId: String) {
     replayButtons.remove(liftId)
-    requestEntries.remove(liftId)
+    realtimeRequests.remove(liftId)
     queuedAt.remove(liftId)
   }
 
   /** 清空呼梯请求及其按钮高亮。 */
   fun clearRequests(liftId: String) {
     replayButtons.remove(liftId)
-    requestEntries.remove(liftId)
+    realtimeRequests.remove(liftId)
     queuedAt.remove(liftId)
     fireButtons(liftId, emptyList(), realtime = true)
     fireRequests(liftId, emptyList(), realtime = true)

@@ -85,11 +85,11 @@ class JinBoServerTest {
         val req = JinBoReq(2, JinBoReqSource.InDoor)
         assertEquals("0", JinBoBtnService.pressButton(LIFT_ID, req).code)
         assertTrue(runtime.reqs.any { it.destFloor == 2 })
-        assertTrue(JinBoBtnService.buttons(LIFT_ID).single { it.floor == 2 && it.action == "呼梯" }.active)
+        assertTrue(JinBoBtnService.buttons(LIFT_ID).single { it.destFloor == 2 && it.action == "呼梯" }.active)
 
         val invalidReq = JinBoReq(3, JinBoReqSource.InDoor, doorCodes = listOf(9))
         assertEquals("400", JinBoBtnService.pressButton(LIFT_ID, invalidReq).code)
-        assertTrue(JinBoBtnService.buttons(LIFT_ID).none { it.floor == 3 })
+        assertTrue(JinBoBtnService.buttons(LIFT_ID).none { it.destFloor == 3 })
         assertTrue(runtime.reqs.none { it == invalidReq })
       } finally {
         JinBoBtnService.reset(LIFT_ID)

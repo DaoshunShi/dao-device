@@ -214,8 +214,8 @@ class JinBoReplayerTest {
       doorStatus = JinBoDoorStatus.OPEN,
       emergencyStopped = false,
       buttons = listOf(
-        JinBoButton("LiftInsidePanel", 2, null, "呼梯", 900L),
-        JinBoButton("LiftInsidePanel", null, null, "关门", 950L),
+        JinBoRequestEntry(JinBoReq(2, JinBoReqSource.InDoor), 900L),
+        JinBoRequestEntry(JinBoReq(0, JinBoReqSource.InDoor), 950L).copy(action = "关门"),
       ),
       reqs = JinBoRequestEntries(listOf(JinBoRequestEntry(JinBoReq(5, JinBoReqSource.Tcp), 975L))),
       logs = emptyList(),
@@ -262,9 +262,9 @@ class JinBoReplayerTest {
       doorStatus = JinBoDoorStatus.OPEN,
       emergencyStopped = false,
       buttons = listOf(
-        JinBoButton("LiftOutsidePanel", 2, JinBoLiftStatus.Up, "呼梯", 900L),
-        JinBoButton("LiftInsidePanel", 2, null, "呼梯", 910L),
-        JinBoButton("LiftTcpPanel", 3, null, "呼梯", 920L),
+        JinBoRequestEntry(JinBoReq(2, JinBoReqSource.OutDoor, JinBoLiftStatus.Up), 900L),
+        JinBoRequestEntry(JinBoReq(2, JinBoReqSource.InDoor), 910L),
+        JinBoRequestEntry(JinBoReq(3, JinBoReqSource.Tcp), 920L),
       ),
       reqs = JinBoRequestEntries(),
       logs = emptyList(),
