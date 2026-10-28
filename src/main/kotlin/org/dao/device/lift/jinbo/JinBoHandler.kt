@@ -11,7 +11,7 @@ object JinBoHandler {
     val req = ctx.bodyAsClass(JinBoReq::class.java)
     logger.info("list request, lift: $liftId, request: $req")
 
-    val resp = JinBoCommandService.press(liftId, req)
+    val resp = JinBoCommandService.request(liftId, req)
     ctx.json(resp)
   }
 

@@ -17,7 +17,7 @@ object JinBoStateService {
       emergencyStopped = snapshot.emergencyStopped,
       realtime = true,
     )
-    publishRequests(liftId, snapshot.reqs.map { it.req })
+    fireRequests(liftId, snapshot.reqs, realtime = true)
   }
 
   fun fireState(liftId: String, frame: JinBoFrame) {
@@ -26,24 +26,23 @@ object JinBoStateService {
       h = frame.h,
       liftStatus = frame.liftStatus,
       direction = frame.direction,
-      doors = frame.doors.ifEmpty { listOf(JinBoDoor(code = 0, status = frame.doorStatus)) },
+      doors = frame.doors,
       emergencyStopped = frame.emergencyStopped,
       realtime = false,
     )
   }
 
-  /** 发布实时请求队列和按钮高亮事件。 */
-  fun publishRequests(liftId: String, reqs: List<JinBoReq>) {
-    val entries = reqs.map { JinBoRequestEntry(it) }
-    fire(liftId, buttons = entries, reqs = entries, realtime = true)
-  }
-
   /** 发布回放帧中的按钮高亮和请求队列事件。 */
   fun fireFrame(liftId: String, frame: JinBoFrame) {
-    fire(liftId, buttons = frame.buttons, reqs = frame.reqs, realtime = false)
+    fireRequests(liftId, frame.reqs, frame.buttons, realtime = false)
   }
 
-  private fun fire(liftId: String, buttons: List<JinBoRequestEntry>, reqs: List<JinBoRequestEntry>, realtime: Boolean) {
+  private fun fireRequests(
+    liftId: String,
+    reqs: List<JinBoRequestEntry>,
+    buttons: List<JinBoRequestEntry> = reqs,
+    realtime: Boolean,
+  ) {
     val active = buttons.filter { it.active }
     val outside = active.filter { it.panel == "LiftOutsidePanel" }.map { it.req }
     val inside = active.filter { it.panel == "LiftInsidePanel" && it.action == "呼梯" }.map { it.req }

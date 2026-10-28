@@ -135,7 +135,7 @@ class ReplayTimeline(
   private fun frameState(f: JinBoFrame): Int = when {
     f.liftStatus == JinBoLiftStatus.Up || f.liftStatus == JinBoLiftStatus.Down -> S_MOVE
     // 有请求，或门处于非关闭状态（开门/关门中、开着）→ 活跃（橙）
-    f.reqs.isNotEmpty() || f.doorStatus != JinBoDoorStatus.CLOSE -> S_REQ
+    f.reqs.isNotEmpty() || f.doors.any { it.status != JinBoDoorStatus.CLOSE } -> S_REQ
     else -> S_NONE
   }
 

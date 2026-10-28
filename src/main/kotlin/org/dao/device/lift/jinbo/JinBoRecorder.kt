@@ -69,7 +69,6 @@ object JinBoRecorder {
       h = snapshot.h,
       liftStatus = snapshot.liftStatus,
       direction = snapshot.direction,
-      doorStatus = aggregateDoorStatus(snapshot.doors),
       emergencyStopped = snapshot.emergencyStopped,
       reqs = snapshot.reqs,
       logs = logs,

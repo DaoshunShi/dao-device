@@ -30,7 +30,7 @@ object JinBoCommandService {
           if (invalidCode != null) {
             JinBoResp("400", "$liftId 电梯不存在门号 $invalidCode")
           } else {
-            val resolvedReq = JinBoDoorService.resolveDoorCodes(req)
+            val resolvedReq = if (req.doorCodes.isEmpty()) req.copy(doorCodes = listOf(0)) else req
             if (lift.reqs.none { it == resolvedReq }) {
               lift.reqs.add(resolvedReq)
             }
@@ -49,6 +49,10 @@ object JinBoCommandService {
       liftId,
       LiftEvent("request-complete", "hash=${req.hashCode()}, req=$reqJson, resp=${JsonHelper.writeValueAsString(response)}"),
     )
+    if (response.code == "0") {
+      JinBoRecorder.logEvent(liftId, LiftEvent(req.source.name, reqJson))
+      refreshRequests(liftId)
+    }
     return response
   }
 
@@ -67,7 +71,8 @@ object JinBoCommandService {
     val lift = mustGetLift(liftId)
     JinBoServer.withLiftLock(lift, "JinBoCommandService.close") {
       if (lift.emc) return JinBoResp("409", "电梯处于急停状态")
-      JinBoDoorService.close(lift)
+      val now = Date()
+      lift.doors.forEach { it.startClosing(now) }
       lift.targetFloor = null
       return JinBoResp()
     }
@@ -91,7 +96,8 @@ object JinBoCommandService {
       val pausedAt = lift.emcStartedOn
       val now = Date()
       if (pausedAt != null) {
-        JinBoDoorService.shiftOperationTimers(lift, now.time - pausedAt.time)
+        val offsetMs = now.time - pausedAt.time
+        lift.doors.forEach { it.shiftOperationTimers(offsetMs) }
       }
       lift.emc = false
       lift.emcStartedOn = null
@@ -113,7 +119,7 @@ object JinBoCommandService {
     JinBoServer.withLiftLock(lift, "JinBoCommandService.resetRequests") {
       lift.reqs.clear()
     }
-    JinBoStateService.publishRequests(liftId, emptyList())
+    JinBoStateService.publish(liftId, JinBoSnapshot.capture(lift))
     JinBoRecorder.logEvent(liftId, LiftEvent("重置", "$liftId 已清空所有呼梯请求"))
     return JinBoResp()
   }
@@ -133,29 +139,20 @@ object JinBoCommandService {
     }
   }
 
-  /** TCP/HTTP 请求：直接入队并立即刷新请求显示。 */
-  fun press(liftId: String, req: JinBoReq): JinBoResp {
-    val response = request(liftId, req)
-    if (response.code == "0") {
-      JinBoRecorder.logEvent(liftId, LiftEvent(req.source.name, JsonHelper.writeValueAsString(req)))
-      refreshRequests(liftId)
-    }
-    return response
-  }
-
   /** 页面按钮呼梯入口：回放模式下禁止页面呼梯。 */
   fun pressButton(liftId: String, req: JinBoReq): JinBoResp {
     if (JinBoEventBus.isReplayMode(liftId)) return JinBoResp("409", "回放状态下禁止页面呼梯")
     logCallPress(liftId, req)
-    return press(liftId, req)
+    return request(liftId, req)
   }
 
   fun pressOpen(liftId: String): JinBoResp {
     if (JinBoEventBus.isReplayMode(liftId)) return JinBoResp("409", "回放状态下禁止页面开门")
-    return pressControl(liftId, "LiftInsidePanel", "开门") {
-      val lift = mustGetLift(liftId)
-      open(liftId, emptyList()).also {
-        if (it.code == "0") JinBoRecorder.logEvent(liftId, LiftEvent("in-open", "destFloor=${lift.curFloor}"))
+    val lift = mustGetLift(liftId)
+    JinBoRecorder.logEvent(liftId, LiftEvent("按钮按下", "电梯=$liftId, 面板=LiftInsidePanel, 楼层=${lift.curFloor}, 按钮=开门"))
+    return open(liftId, emptyList()).also {
+      if (it.code == "0") {
+        JinBoRecorder.logEvent(liftId, LiftEvent("in-open", "destFloor=${lift.curFloor}"))
       }
     }
   }
@@ -163,11 +160,11 @@ object JinBoCommandService {
   fun pressClose(liftId: String, fromTcp: Boolean = false): JinBoResp {
     if (JinBoEventBus.isReplayMode(liftId)) return JinBoResp("409", "回放状态下禁止页面关门")
     val panel = if (fromTcp) "LiftTcpPanel" else "LiftInsidePanel"
-    return pressControl(liftId, panel, "关门") {
-      close(liftId).also {
-        if (it.code == "0") {
-          JinBoRecorder.logEvent(liftId, LiftEvent("关闭", if (fromTcp) "TCP栏关门按钮" else "关门按钮"))
-        }
+    val floor = mustGetLift(liftId).curFloor
+    JinBoRecorder.logEvent(liftId, LiftEvent("按钮按下", "电梯=$liftId, 面板=$panel, 楼层=$floor, 按钮=关门"))
+    return close(liftId).also {
+      if (it.code == "0") {
+        JinBoRecorder.logEvent(liftId, LiftEvent("关闭", if (fromTcp) "TCP栏关门按钮" else "关门按钮"))
       }
     }
   }
@@ -181,18 +178,12 @@ object JinBoCommandService {
     JinBoRecorder.logEvent(liftId, LiftEvent("按钮按下", "电梯=$liftId, 面板=${req.source.panelName}, 楼层=${req.destFloor}$direction"))
   }
 
-  private fun pressControl(liftId: String, panel: String, action: String, command: () -> JinBoResp): JinBoResp {
-    val floor = JinBoServer.lifts[liftId]?.curFloor
-    JinBoRecorder.logEvent(liftId, LiftEvent("按钮按下", "电梯=$liftId, 面板=$panel, 楼层=$floor, 按钮=$action"))
-    return command()
-  }
-
   private fun mustGetLift(liftId: String): JinBoRuntime =
     JinBoServer.lifts[liftId] ?: throw RuntimeException("$liftId 电梯不存在")
 
   private fun refreshRequests(liftId: String) {
     val lift = JinBoServer.lifts[liftId] ?: return
-    JinBoStateService.publishRequests(liftId, lift.reqs.toList())
+    JinBoStateService.publish(liftId, JinBoSnapshot.capture(lift))
   }
 
 }

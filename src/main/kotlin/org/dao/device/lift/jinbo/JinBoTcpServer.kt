@@ -245,7 +245,7 @@ class ServerHandler(val liftId: String, val server: JinBoTcpServer) : SimpleChan
       0x3e8 -> {
         // 到指定楼层
         val req: JinBoTcpGoToReq = JsonHelper.mapper.readValue(msg.data, jacksonTypeRef())
-        val resp = JinBoCommandService.press(
+        val resp = JinBoCommandService.request(
           liftId,
           JinBoReq(req.destFloor.toInt(), doorCodes = req.doorCodes),
         )

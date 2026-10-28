@@ -134,7 +134,7 @@ class JinBoServerTest {
         assertEquals(listOf(0), returnedReq.doorCodes)
 
         runtime.reqs.clear()
-        JinBoStateService.publishRequests(LIFT_ID, runtime.reqs)
+        JinBoStateService.publish(LIFT_ID, JinBoSnapshot.capture(runtime))
         assertTrue(runtime.reqs.isEmpty())
       } finally {
       }
@@ -156,13 +156,13 @@ class JinBoServerTest {
       try {
         JinBoCommandService.pressButton(LIFT_ID, JinBoReq(2, JinBoReqSource.InDoor))
         runtime.reqs.clear()
-        JinBoStateService.publishRequests(LIFT_ID, runtime.reqs)
+        JinBoStateService.publish(LIFT_ID, JinBoSnapshot.capture(runtime))
 
         val insideEvents = events.filter { it.topic == "inside" }
         assertTrue(insideEvents.dropLast(1).all { it.msg != "[]" })
         assertEquals("[]", insideEvents.last().msg)
       } finally {
-        JinBoEventBus.listener[LIFT_ID]?.remove(listener)
+        JinBoEventBus.removeListener(LIFT_ID, listener)
       }
     }
   }

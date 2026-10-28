@@ -6,12 +6,16 @@ import java.util.concurrent.ConcurrentHashMap
 import java.util.concurrent.CopyOnWriteArrayList
 
 object JinBoEventBus {
-  var listener: MutableMap<String, MutableList<GuiEventListener>> = ConcurrentHashMap()
+  private val listener: MutableMap<String, MutableList<GuiEventListener>> = ConcurrentHashMap()
   private val replayedTopics = ConcurrentHashMap.newKeySet<String>()
 
   @Synchronized
   fun register(topic: String, l: GuiEventListener) {
     listener.getOrPut(topic) { CopyOnWriteArrayList() }.add(l)
+  }
+
+  fun removeListener(topic: String, l: GuiEventListener) {
+    listener[topic]?.remove(l)
   }
 
   fun fire(topic: String, event: LiftEvent) {

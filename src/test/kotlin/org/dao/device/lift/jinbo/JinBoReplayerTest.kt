@@ -1,6 +1,7 @@
 package org.dao.device.lift.jinbo
 
 import org.dao.device.common.JsonHelper
+import org.dao.device.lift.jinbo.JinBoDoorStatus
 import org.dao.device.lift.jinbo.fe.JinBoEventBus
 import org.dao.device.lift.jinbo.fe.LiftEventLogPanel
 import org.dao.device.lift.jinbo.fe.LiftReplayPanel
@@ -92,15 +93,36 @@ class JinBoReplayerTest {
 
   @Test
   fun `loading an existing replay entry from logs replays its first frame`() {
-    val replay = JinBoReplayer("B")
-    assertTrue(replay.load("replay.log") > 0)
+    val logFile = File("logs/replay.log").apply { parentFile.mkdirs() }
+    val original = if (logFile.exists()) logFile.readText() else null
+    logFile.writeText(
+      JsonHelper.mapper.writeValueAsString(
+        JinBoFrame(
+          liftId = "B",
+          ts = 1_000L,
+          curFloor = 1,
+          h = 0.0,
+          liftStatus = JinBoLiftStatus.Idle,
+          emergencyStopped = false,
+          reqs = emptyList(),
+          logs = emptyList(),
+        ),
+      ),
+    )
 
-    val changes = mutableListOf<Pair<Int, Long>>()
-    replay.onFrameChanged = { _, index, clockTs -> changes.add(index to clockTs) }
-    replay.seekIndex(0)
+    try {
+      val replay = JinBoReplayer("B")
+      assertTrue(replay.load("replay.log") > 0)
 
-    assertTrue(replay.currentTs > 0)
-    assertEquals(0, changes.single().first)
+      val changes = mutableListOf<Pair<Int, Long>>()
+      replay.onFrameChanged = { _, index, clockTs -> changes.add(index to clockTs) }
+      replay.seekIndex(0)
+
+      assertTrue(replay.currentTs > 0)
+      assertEquals(0, changes.single().first)
+    } finally {
+      if (original != null) logFile.writeText(original) else logFile.delete()
+    }
   }
 
   @Test
@@ -156,13 +178,12 @@ class JinBoReplayerTest {
       curFloor = 2,
       h = 3.0,
       liftStatus = JinBoLiftStatus.Up,
-      doorStatus = JinBoDoorStatus.OPEN,
-      emergencyStopped = false,
-      reqs = JinBoRequestEntries(listOf(
+            emergencyStopped = false,
+      reqs = listOf(
         JinBoRequestEntry(JinBoReq(3, JinBoReqSource.OutDoor, JinBoLiftStatus.Up, listOf(0))),
         JinBoRequestEntry(JinBoReq(4, JinBoReqSource.InDoor, doorCodes = listOf(1))),
         JinBoRequestEntry(JinBoReq(5, JinBoReqSource.Tcp, doorCodes = listOf(0))),
-      )),
+      ),
       logs = listOf("request-start:test"),
       doors = listOf(JinBoDoor(0, JinBoDoorStatus.OPEN), JinBoDoor(1, JinBoDoorStatus.CLOSE)),
     )
@@ -198,7 +219,7 @@ class JinBoReplayerTest {
         assertEquals(listOf(3, 4, 5), entries.map { it.req.destFloor })
       } finally {
         replay.close()
-        JinBoEventBus.listener[LIFT_ID]?.remove(listener)
+        JinBoEventBus.removeListener(LIFT_ID, listener)
       }
     }
   }
@@ -211,13 +232,12 @@ class JinBoReplayerTest {
       curFloor = 2,
       h = 3.0,
       liftStatus = JinBoLiftStatus.Idle,
-      doorStatus = JinBoDoorStatus.OPEN,
-      emergencyStopped = false,
+            emergencyStopped = false,
       buttons = listOf(
         JinBoRequestEntry(JinBoReq(2, JinBoReqSource.InDoor)),
         JinBoRequestEntry(JinBoReq(0, JinBoReqSource.InDoor)).copy(action = "关门"),
       ),
-      reqs = JinBoRequestEntries(listOf(JinBoRequestEntry(JinBoReq(5, JinBoReqSource.Tcp)))),
+      reqs = listOf(JinBoRequestEntry(JinBoReq(5, JinBoReqSource.Tcp))),
       logs = emptyList(),
     )
     withReplayFile(FILE_NAME, fileNamePattern = "replay-replayer-test.log", frames = listOf(frame)) {
@@ -246,7 +266,7 @@ class JinBoReplayerTest {
         assertEquals(listOf(5), reqs.map { it.req.destFloor })
       } finally {
         replay.close()
-        JinBoEventBus.listener[LIFT_ID]?.remove(listener)
+        JinBoEventBus.removeListener(LIFT_ID, listener)
       }
     }
   }
@@ -290,7 +310,7 @@ class JinBoReplayerTest {
         assertEquals(listOf("replay"), stateEvents.map { it.msg })
       } finally {
         JinBoEventBus.setReplayMode(LIFT_ID, false)
-        JinBoEventBus.listener[LIFT_ID]?.remove(listener)
+        JinBoEventBus.removeListener(LIFT_ID, listener)
       }
     }
   }
@@ -303,9 +323,8 @@ class JinBoReplayerTest {
       curFloor = 2,
       h = 3.0,
       liftStatus = JinBoLiftStatus.Down,
-      doorStatus = JinBoDoorStatus.OPEN,
-      emergencyStopped = false,
-      reqs = JinBoRequestEntries(),
+            emergencyStopped = false,
+      reqs = emptyList(),
       logs = listOf("replay-log"),
     )
     withReplayFile(FILE_NAME, frames = listOf(replayFrame), fileNamePattern = "replay-replayer-test.log") {
@@ -341,7 +360,7 @@ class JinBoReplayerTest {
       } finally {
         SwingUtilities.invokeAndWait { replayPanel.setReplayEnabled(false) }
         frame.dispose()
-        JinBoEventBus.listener[LIFT_ID]?.remove(listener)
+        JinBoEventBus.removeListener(LIFT_ID, listener)
       }
     }
   }
@@ -354,9 +373,8 @@ class JinBoReplayerTest {
       curFloor = 2,
       h = 3.0,
       liftStatus = JinBoLiftStatus.Down,
-      doorStatus = JinBoDoorStatus.OPEN,
-      emergencyStopped = false,
-      reqs = JinBoRequestEntries(),
+            emergencyStopped = false,
+      reqs = emptyList(),
       logs = emptyList(),
     )
     withReplayFile(FILE_NAME, frames = listOf(replayFrame), fileNamePattern = "replay-replayer-test.log") {
@@ -412,9 +430,8 @@ class JinBoReplayerTest {
       curFloor = 2,
       h = 3.0,
       liftStatus = JinBoLiftStatus.Down,
-      doorStatus = JinBoDoorStatus.OPEN,
-      emergencyStopped = false,
-      reqs = JinBoRequestEntries(),
+            emergencyStopped = false,
+      reqs = emptyList(),
       logs = listOf("replay-log"),
     )
     withReplayFile(FILE_NAME, frames = listOf(replayFrame), fileNamePattern = "replay-replayer-test.log") {
@@ -465,9 +482,8 @@ class JinBoReplayerTest {
       curFloor = 2,
       h = 3.0,
       liftStatus = JinBoLiftStatus.Down,
-      doorStatus = JinBoDoorStatus.OPEN,
-      emergencyStopped = false,
-      reqs = JinBoRequestEntries(),
+            emergencyStopped = false,
+      reqs = emptyList(),
       logs = listOf("replay-log"),
     )
     withReplayFile(FILE_NAME, frames = listOf(replayFrame), fileNamePattern = "replay-replayer-test.log") {
@@ -516,9 +532,8 @@ class JinBoReplayerTest {
       h = 3.0,
       liftStatus = JinBoLiftStatus.Up,
       direction = JinBoLiftStatus.Down,
-      doorStatus = JinBoDoorStatus.OPEN,
-      emergencyStopped = false,
-      reqs = JinBoRequestEntries(),
+            emergencyStopped = false,
+      reqs = emptyList(),
       logs = emptyList(),
     )
     withReplayFile(FILE_NAME, frames = listOf(replayFrame), fileNamePattern = "replay-replayer-test.log") {
@@ -562,16 +577,6 @@ class JinBoReplayerTest {
     assertEquals(JinBoLiftStatus.Down, frame.direction)
   }
 
-  @Test
-  fun `old replay requests are restored without a fake queued time`() {
-    val frame = JsonHelper.mapper.readValue(
-      """{"liftId":"$LIFT_ID","ts":1000,"curFloor":2,"h":3.0,"liftStatus":"Idle","doorStatus":"OPEN","emergencyStopped":false,"reqs":[{"destFloor":5,"source":"Tcp","doorCodes":[]}],"logs":[]}""",
-      JinBoFrame::class.java,
-    )
-
-    assertEquals(listOf(JinBoReq(5, JinBoReqSource.Tcp)), frame.reqs.map { it.req })
-  }
-
   private fun withReplayFile(
     fileName: String,
     timestamps: List<Long> = emptyList(),
@@ -583,9 +588,8 @@ class JinBoReplayerTest {
         curFloor = 1,
         h = 0.0,
         liftStatus = JinBoLiftStatus.Idle,
-        doorStatus = JinBoDoorStatus.CLOSE,
-        emergencyStopped = false,
-        reqs = JinBoRequestEntries(),
+                emergencyStopped = false,
+        reqs = emptyList(),
         logs = emptyList(),
       )
     },
@@ -611,9 +615,8 @@ class JinBoReplayerTest {
     curFloor = 1,
     h = 0.0,
     liftStatus = JinBoLiftStatus.Idle,
-    doorStatus = JinBoDoorStatus.CLOSE,
-    emergencyStopped = false,
-    reqs = JinBoRequestEntries(),
+        emergencyStopped = false,
+    reqs = emptyList(),
     logs = listOf(log),
   )
 

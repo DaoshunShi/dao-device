@@ -1,6 +1,7 @@
 package org.dao.device.lift.jinbo
 
 import org.slf4j.LoggerFactory
+import java.util.Date
 import java.util.concurrent.ConcurrentHashMap
 import java.util.concurrent.ExecutorService
 import java.util.concurrent.Executors
@@ -58,7 +59,8 @@ object JinBoServer {
       JinBoMoveService.syncCurrentFloor(lr)
       if (lr.emc) return@withLiftLock JinBoSnapshot.capture(lr)
 
-      JinBoDoorService.update(lr)
+      val now = Date()
+      lr.doors.forEach { it.advance(now, lr.config) }
       if (!lr.isMoving()) JinBoMoveService.cleanOpenedFloorReq(lr)
 
       if (lr.targetFloor == null) {
@@ -72,7 +74,7 @@ object JinBoServer {
       JinBoRequestSelector.retargetNearerFloor(lr)
 
       if (lr.targetFloor != null && lr.targetFloor != lr.curFloor) {
-        JinBoDoorService.close(lr)
+        lr.doors.forEach { it.startClosing(now) }
         if (lr.allDoorsClosed()) {
           JinBoMoveService.advance(lr)
         }
