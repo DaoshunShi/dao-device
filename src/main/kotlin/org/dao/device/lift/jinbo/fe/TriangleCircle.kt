@@ -1,12 +1,11 @@
 package org.dao.device.lift.jinbo.fe
 
-import com.fasterxml.jackson.module.kotlin.jacksonTypeRef
 import org.dao.device.common.GuiEventListener
-import org.dao.device.common.JsonHelper
 import org.dao.device.lift.jinbo.JinBoBtnService
 import org.dao.device.lift.jinbo.JinBoConfig
 import org.dao.device.lift.jinbo.JinBoLiftStatus
 import org.dao.device.lift.jinbo.JinBoReq
+import org.dao.device.lift.jinbo.JinBoReqSource
 import org.dao.device.lift.jinbo.event.LiftEvent
 import java.awt.BasicStroke
 import java.awt.Color
@@ -14,8 +13,6 @@ import java.awt.Graphics
 import java.awt.Graphics2D
 import java.awt.Polygon
 import java.awt.RenderingHints
-import java.awt.event.MouseAdapter
-import java.awt.event.MouseEvent
 import kotlin.math.PI
 import kotlin.math.cos
 import kotlin.math.sin
@@ -36,22 +33,15 @@ class TriangleCircle(
 
   private val rotationAngle: Double = if (up) -PI / 2 else PI / 2
 
-  private var active = false
-
   init {
-    addMouseListener(object : MouseAdapter() {
-      override fun mouseClicked(e: MouseEvent) {
-        // 按下日志必须先于请求提交打印；不能等到请求拿到电梯锁后才输出。
-        System.err.println(
-          "按钮按下: 电梯=${config.id}, 面板=LiftOutsidePanel, 楼层=$floorIdx, " +
-            "方向=${if (up) JinBoLiftStatus.Up else JinBoLiftStatus.Down}",
-        )
-        val direction = if (up) JinBoLiftStatus.Up else JinBoLiftStatus.Down
-        JinBoBtnService.pressOutDoor(config.id, floorIdx, direction)
-      }
-    })
-
     JinBoEventBus.register(config.id, this)
+  }
+
+  override fun onClick() {
+    JinBoBtnService.pressButtonLater(
+      config.id,
+      JinBoReq(floorIdx, JinBoReqSource.OutDoor, if (up) JinBoLiftStatus.Up else JinBoLiftStatus.Down),
+    )
   }
 
   override fun paintComponent(g: Graphics) {
@@ -67,6 +57,7 @@ class TriangleCircle(
     withPressedTransform(g2d) {
       val centerX = width / 2
       val centerY = height / 2
+      val active = JinBoBtnService.isOutsideActive(config.id, floorIdx, up)
 
       // 绘制圆圈
       g2d.color = if (active) Color.BLUE else Color.gray
@@ -109,14 +100,7 @@ class TriangleCircle(
   }
 
   override fun onEvent(event: LiftEvent) {
-    if (event.topic == "outside") {
-      val list: List<JinBoReq> = JsonHelper.mapper.readValue(event.msg, jacksonTypeRef())
-      active =
-        list.any {
-          it.destFloor == floorIdx &&
-            ((up && it.type == JinBoLiftStatus.Up) || (!up && it.type == JinBoLiftStatus.Down))
-        }
-      repaint()
-    }
+    // 旧事件可能在最新点击之后到达，按钮状态始终从 JinBoBtnService 读取。
+    if (event.topic == "outside") repaint()
   }
 }

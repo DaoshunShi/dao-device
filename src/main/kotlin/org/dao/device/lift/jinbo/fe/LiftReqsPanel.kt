@@ -32,7 +32,8 @@ class LiftReqsPanel(private val config: JinBoConfig) : JPanel(BorderLayout()), G
   override fun onEvent(event: LiftEvent) {
     if (event.topic != "reqs") return
     val entries = JsonHelper.mapper.readValue(event.msg, jacksonTypeRef<List<JinBoRequestEntry>>())
-    SwingUtilities.invokeLater { render(entries) }
+    // 已在 EDT 上时不能再排队，否则较旧的 reqs 快照可能晚于新点击覆盖界面。
+    if (SwingUtilities.isEventDispatchThread()) render(entries) else SwingUtilities.invokeLater { render(entries) }
   }
 
   private fun render(entries: List<JinBoRequestEntry>) {

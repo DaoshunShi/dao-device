@@ -1,8 +1,6 @@
 package org.dao.device.lift.jinbo.fe
 
-import com.fasterxml.jackson.module.kotlin.jacksonTypeRef
 import org.dao.device.common.GuiEventListener
-import org.dao.device.common.JsonHelper
 import org.dao.device.lift.jinbo.JinBoBtnService
 import org.dao.device.lift.jinbo.JinBoConfig
 import org.dao.device.lift.jinbo.JinBoReq
@@ -14,8 +12,6 @@ import java.awt.Graphics
 import java.awt.Graphics2D
 import java.awt.Polygon
 import java.awt.RenderingHints
-import java.awt.event.MouseAdapter
-import java.awt.event.MouseEvent
 import kotlin.math.PI
 import kotlin.math.cos
 import kotlin.math.sin
@@ -23,22 +19,16 @@ import kotlin.math.sin
 /**
  * 圆形内套文本，用于电梯内去指定楼层
  */
-class LabelCircle2(config: JinBoConfig, val floorIdx: Int, val labelStr: String, val circleR: Int, val labelSize: Int) :
+class LabelCircle2(private val config: JinBoConfig, val floorIdx: Int, val labelStr: String, val circleR: Int, val labelSize: Int) :
   ClickAnimatedPanel(),
   GuiEventListener {
 
-  private var active = false
-
   init {
-    addMouseListener(object : MouseAdapter() {
-      override fun mouseClicked(e: MouseEvent) {
-        // 按下日志必须先于请求提交打印；不能等到请求拿到电梯锁后才输出。
-        System.err.println("按钮按下: 电梯=${config.id}, 面板=LiftTcpPanel, 楼层=$floorIdx")
-        JinBoBtnService.pressButton(config.id, JinBoReq(floorIdx))
-      }
-    })
-
     JinBoEventBus.register(config.id, this)
+  }
+
+  override fun onClick() {
+    JinBoBtnService.pressButtonLater(config.id, JinBoReq(floorIdx))
   }
 
   override fun paintComponent(g: Graphics) {
@@ -51,6 +41,7 @@ class LabelCircle2(config: JinBoConfig, val floorIdx: Int, val labelStr: String,
     withPressedTransform(g2d) {
       val centerX = width / 2
       val centerY = height / 2
+      val active = JinBoBtnService.isTcpActive(config.id, floorIdx)
 
       // 绘制圆圈
       g2d.color = if (active) Color.BLUE else Color.gray
@@ -91,10 +82,7 @@ class LabelCircle2(config: JinBoConfig, val floorIdx: Int, val labelStr: String,
   }
 
   override fun onEvent(event: LiftEvent) {
-    if (event.topic == "tcp") {
-      val list: List<JinBoReq> = JsonHelper.mapper.readValue(event.msg, jacksonTypeRef())
-      active = list.any { it.destFloor == floorIdx }
-      repaint()
-    }
+    // 旧事件可能在最新点击之后到达，按钮状态始终从 JinBoBtnService 读取。
+    if (event.topic == "tcp") repaint()
   }
 }

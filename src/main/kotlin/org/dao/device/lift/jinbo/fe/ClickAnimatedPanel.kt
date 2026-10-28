@@ -21,6 +21,8 @@ abstract class ClickAnimatedPanel : JPanel() {
         if (e.button != MouseEvent.BUTTON1) return
         setPressed(true)
         startReleaseTimer()
+        // 应用切换后 mouseClicked 可能丢失；mousePressed 是更可靠的左键点击入口。
+        onClick()
       }
 
       override fun mouseReleased(e: MouseEvent) {
@@ -35,6 +37,9 @@ abstract class ClickAnimatedPanel : JPanel() {
   }
 
   protected fun isPressed(): Boolean = pressed
+
+  /** 自定义按钮的点击处理，[java.awt.event.MouseEvent] 的按下回调中调用。 */
+  protected abstract fun onClick()
 
   /** 绘制本次动画的按压轮廓，调用方在绘制完按钮内容后调用。 */
   protected fun paintPressedOverlay(g: Graphics2D) {
