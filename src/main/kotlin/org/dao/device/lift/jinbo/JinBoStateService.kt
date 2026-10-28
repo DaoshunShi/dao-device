@@ -7,11 +7,9 @@ import org.dao.device.lift.jinbo.fe.JinBoEventBus
 /** 电梯位置和门状态的图形刷新事件；状态数据来自实时运行时或回放帧。 */
 object JinBoStateService {
   /** 由仿真线程在 tick 内发布；状态事件用于界面更新，不读取运行中的可变对象。 */
-  fun publish(lift: JinBoRuntime) {
-    val reqs = lift.reqs.toList()
-    val snapshot = LiftState.capture(lift)
+  fun publish(liftId: String, snapshot: JinBoSnapshot) {
     fireState(
-      liftId = lift.config.id,
+      liftId = liftId,
       h = snapshot.h,
       liftStatus = snapshot.liftStatus,
       direction = snapshot.direction,
@@ -19,7 +17,7 @@ object JinBoStateService {
       emergencyStopped = snapshot.emergencyStopped,
       realtime = true,
     )
-    publishRequests(lift.config.id, reqs)
+    publishRequests(liftId, snapshot.reqs.map { it.req })
   }
 
   fun fireState(liftId: String, frame: JinBoFrame) {
@@ -80,23 +78,5 @@ object JinBoStateService {
       ),
     )
     if (realtime) JinBoEventBus.fireRealtime(liftId, event) else JinBoEventBus.fire(liftId, event)
-  }
-
-  private data class LiftState(
-    val h: Double,
-    val liftStatus: JinBoLiftStatus,
-    val direction: JinBoLiftStatus,
-    val doors: List<JinBoDoor>,
-    val emergencyStopped: Boolean,
-  ) {
-    companion object {
-      fun capture(lift: JinBoRuntime): LiftState = LiftState(
-        h = lift.h,
-        liftStatus = lift.liftStatus,
-        direction = lift.direction,
-        doors = lift.doors.map { it.copy() },
-        emergencyStopped = lift.emc,
-      )
-    }
   }
 }

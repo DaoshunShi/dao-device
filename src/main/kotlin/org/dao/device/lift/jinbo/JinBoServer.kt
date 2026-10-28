@@ -54,9 +54,9 @@ object JinBoServer {
 
   /** 推进一次电梯仿真 tick。 */
   fun processLift(lr: JinBoRuntime) {
-    withLiftLock(lr, "JinBoServer.processLift") {
+    val snapshot = withLiftLock(lr, "JinBoServer.processLift") {
       JinBoMoveService.syncCurrentFloor(lr)
-      if (lr.emc) return
+      if (lr.emc) return@withLiftLock JinBoSnapshot.capture(lr)
 
       JinBoDoorService.update(lr)
       if (!lr.isMoving()) JinBoMoveService.cleanOpenedFloorReq(lr)
@@ -79,10 +79,11 @@ object JinBoServer {
       }
 
       JinBoMoveService.arrive(lr)
+      JinBoSnapshot.capture(lr)
     }
 
-    JinBoStateService.publish(lr)
-    JinBoRecorder.capture(lr)
+    JinBoStateService.publish(lr.config.id, snapshot)
+    JinBoRecorder.capture(lr.config.id, snapshot)
   }
 
   internal inline fun <T> withLiftLock(lift: JinBoRuntime, remark: String, block: () -> T): T {

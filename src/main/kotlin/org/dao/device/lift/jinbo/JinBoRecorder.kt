@@ -29,7 +29,7 @@ object JinBoRecorder {
   private val logBuf: MutableMap<String, MutableList<String>> = ConcurrentHashMap()
 
   // liftId -> 上一写入帧的去重快照
-  private val lastKey: MutableMap<String, Snapshot> = ConcurrentHashMap()
+  private val lastKey: MutableMap<String, JinBoSnapshot> = ConcurrentHashMap()
 
   /** 记录并显示一条电梯事件日志。 */
   fun logEvent(liftId: String, event: LiftEvent) {
@@ -55,24 +55,8 @@ object JinBoRecorder {
    * 采集一帧。必须在 synchronized(lr) 内调用（processLift 已满足）。
    * 急停状态也应录制，故调用点需放在 emc 提前返回之前。
    */
-  fun capture(lr: JinBoRuntime) {
-    val liftId = lr.config.id
-    val buttons = lr.reqs.map { JinBoRequestEntry(it) }
-    val reqs = JinBoRequestEntries(lr.reqs.map { JinBoRequestEntry(it) })
-    val doors = lr.doors.map { it.copy() }
+  fun capture(liftId: String, snapshot: JinBoSnapshot) {
     val logs = logBuf.remove(liftId).orEmpty().toList()
-
-    // 在采集线程完成归帧、去重和时间戳，避免异步队列把日志挂到错误的帧。
-    val snapshot = Snapshot(
-      curFloor = lr.curFloor,
-      h = lr.h,
-      liftStatus = lr.liftStatus,
-      direction = lr.direction,
-      emergencyStopped = lr.emc,
-      buttons = buttons,
-      reqs = reqs,
-      doors = doors,
-    )
     if (logs.isEmpty() && snapshot == lastKey[liftId]) {
       return // 状态无变化且无日志，跳过写盘
     }

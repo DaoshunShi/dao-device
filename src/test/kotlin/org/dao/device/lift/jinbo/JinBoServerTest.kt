@@ -37,7 +37,15 @@ class JinBoServerTest {
   fun `door advances through open close states using operation timings`() {
     val door = JinBoDoor(0)
     val startedAt = Date(0)
-    val config = JinBoDoorConfig(openCost = 100, closeCost = 100, closeDelay = 200)
+    val config = JinBoConfig(
+      id = "test-door",
+      port = 0,
+      floors = listOf(JinBoFloor(1, "1F", 0.0)),
+      liftSpeed = 2.0,
+      openCost = 100,
+      closeCost = 100,
+      closeDelay = 200,
+    )
     door.setStatus(JinBoDoorStatus.OPENING, startedAt)
 
     door.advance(Date(99), config)

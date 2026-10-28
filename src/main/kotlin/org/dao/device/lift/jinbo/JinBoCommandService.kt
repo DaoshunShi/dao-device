@@ -15,7 +15,7 @@ object JinBoCommandService {
   }
 
   fun request(liftId: String, req: JinBoReq): JinBoResp {
-    val lift = JinBoServer.lifts[liftId] ?: throw RuntimeException("$liftId 电梯不存在")
+    val lift = mustGetLift(liftId)
     val reqJson = JsonHelper.writeValueAsString(req)
     JinBoRecorder.logEvent(liftId, LiftEvent("request-start", "hash=${req.hashCode()}, req=$reqJson"))
     val response = try {
@@ -53,7 +53,7 @@ object JinBoCommandService {
   }
 
   fun open(liftId: String, doorCodes: List<Int>): JinBoResp {
-    val lift = JinBoServer.lifts[liftId] ?: throw RuntimeException("$liftId 电梯不存在")
+    val lift = mustGetLift(liftId)
     JinBoServer.withLiftLock(lift, "JinBoCommandService.open, doorCodes=$doorCodes") {
       if (lift.emc) return JinBoResp("409", "电梯处于急停状态")
       if (lift.isMoving()) return JinBoResp("400", "电梯正在运行中，不能开门")
@@ -64,7 +64,7 @@ object JinBoCommandService {
   }
 
   fun close(liftId: String): JinBoResp {
-    val lift = JinBoServer.lifts[liftId] ?: throw RuntimeException("$liftId 电梯不存在")
+    val lift = mustGetLift(liftId)
     JinBoServer.withLiftLock(lift, "JinBoCommandService.close") {
       if (lift.emc) return JinBoResp("409", "电梯处于急停状态")
       JinBoDoorService.close(lift)
@@ -74,7 +74,7 @@ object JinBoCommandService {
   }
 
   fun emergencyStop(liftId: String): JinBoResp {
-    val lift = JinBoServer.lifts[liftId] ?: throw RuntimeException("$liftId 电梯不存在")
+    val lift = mustGetLift(liftId)
     JinBoServer.withLiftLock(lift, "JinBoCommandService.emergencyStop") {
       if (lift.emc) return JinBoResp()
       lift.emc = true
@@ -85,7 +85,7 @@ object JinBoCommandService {
   }
 
   fun releaseEmergencyStop(liftId: String): JinBoResp {
-    val lift = JinBoServer.lifts[liftId] ?: throw RuntimeException("$liftId 电梯不存在")
+    val lift = mustGetLift(liftId)
     JinBoServer.withLiftLock(lift, "JinBoCommandService.releaseEmergencyStop") {
       if (!lift.emc) return JinBoResp()
       val pausedAt = lift.emcStartedOn
@@ -102,14 +102,14 @@ object JinBoCommandService {
   }
 
   fun toggleEmergencyStop(liftId: String): JinBoResp {
-    val lift = JinBoServer.lifts[liftId] ?: throw RuntimeException("$liftId 电梯不存在")
+    val lift = mustGetLift(liftId)
     JinBoServer.withLiftLock(lift, "JinBoCommandService.toggleEmergencyStop") {
       return if (lift.emc) releaseEmergencyStop(liftId) else emergencyStop(liftId)
     }
   }
 
   fun resetRequests(liftId: String): JinBoResp {
-    val lift = JinBoServer.lifts[liftId] ?: throw RuntimeException("$liftId 电梯不存在")
+    val lift = mustGetLift(liftId)
     JinBoServer.withLiftLock(lift, "JinBoCommandService.resetRequests") {
       lift.reqs.clear()
     }
@@ -119,7 +119,7 @@ object JinBoCommandService {
   }
 
   fun status(liftId: String): JinBoStatusResp {
-    val lift = JinBoServer.lifts[liftId] ?: throw RuntimeException("$liftId 电梯不存在")
+    val lift = mustGetLift(liftId)
     return JinBoServer.withLiftLock(lift, "JinBoCommandService.status") {
       JinBoStatusResp(
         currentFloor = lift.curFloor.toString(),
@@ -153,7 +153,7 @@ object JinBoCommandService {
   fun pressOpen(liftId: String): JinBoResp {
     if (JinBoEventBus.isReplayMode(liftId)) return JinBoResp("409", "回放状态下禁止页面开门")
     return pressControl(liftId, "LiftInsidePanel", "开门") {
-      val lift = JinBoServer.lifts[liftId] ?: return@pressControl JinBoResp("404", "$liftId 电梯不存在")
+      val lift = mustGetLift(liftId)
       open(liftId, emptyList()).also {
         if (it.code == "0") JinBoRecorder.logEvent(liftId, LiftEvent("in-open", "destFloor=${lift.curFloor}"))
       }
@@ -186,6 +186,9 @@ object JinBoCommandService {
     JinBoRecorder.logEvent(liftId, LiftEvent("按钮按下", "电梯=$liftId, 面板=$panel, 楼层=$floor, 按钮=$action"))
     return command()
   }
+
+  private fun mustGetLift(liftId: String): JinBoRuntime =
+    JinBoServer.lifts[liftId] ?: throw RuntimeException("$liftId 电梯不存在")
 
   private fun refreshRequests(liftId: String) {
     val lift = JinBoServer.lifts[liftId] ?: return

@@ -177,7 +177,7 @@ data class JinBoDoor(
   }
 
   /** 按门自身的状态推进一次；开门、关门和延迟时间取自 [config]。 */
-  fun advance(now: Date, config: JinBoDoorConfig) {
+  fun advance(now: Date, config: JinBoConfig) {
     when (status) {
       JinBoDoorStatus.OPENING -> {
         val startedAt = opStartOn ?: now.also { opStartOn = it }
@@ -232,13 +232,6 @@ data class JinBoDoor(
 fun aggregateDoorStatus(doors: List<JinBoDoor>): JinBoDoorStatus =
   doors.minByOrNull { it.status.displayPriority }?.status ?: JinBoDoorStatus.CLOSE
 
-/** 单扇门推进所需的开门、关门和自动关门延迟配置。 */
-data class JinBoDoorConfig(
-  val openCost: Int,
-  val closeCost: Int,
-  val closeDelay: Int,
-)
-
 // -----------------------------------------------------------------------------
 // 回放帧
 // -----------------------------------------------------------------------------
@@ -271,8 +264,8 @@ data class JinBoReplayPosition(
   val clockTs: Long,
 )
 
-/** 录制去重使用的可视状态快照；不包含采集时间和本帧日志。 */
-data class Snapshot(
+/** 实时电梯的一次可视化快照，供 UI 广播和回放录制共用。 */
+data class JinBoSnapshot(
   val curFloor: Int,
   val h: Double,
   val liftStatus: JinBoLiftStatus,
@@ -281,7 +274,23 @@ data class Snapshot(
   val buttons: List<JinBoRequestEntry>,
   val reqs: JinBoRequestEntries,
   val doors: List<JinBoDoor>,
-)
+) {
+  companion object {
+    fun capture(lr: JinBoRuntime): JinBoSnapshot {
+      val reqs = JinBoRequestEntries(lr.reqs.map { JinBoRequestEntry(it) })
+      return JinBoSnapshot(
+        curFloor = lr.curFloor,
+        h = lr.h,
+        liftStatus = lr.liftStatus,
+        direction = lr.direction,
+        emergencyStopped = lr.emc,
+        buttons = reqs,
+        reqs = reqs,
+        doors = lr.doors.map { it.copy() },
+      )
+    }
+  }
+}
 
 // -----------------------------------------------------------------------------
 // 外部协议响应

@@ -7,13 +7,8 @@ object JinBoDoorService {
   /** 按每扇门的状态推进开门、自动关门和关门动作。 */
   fun update(lift: JinBoRuntime) {
     val now = Date()
-    val config = JinBoDoorConfig(
-      openCost = lift.config.openCost,
-      closeCost = lift.config.closeCost,
-      closeDelay = lift.config.closeDelay,
-    )
     lift.doors.forEach {
-      it.advance(now, config)
+      it.advance(now, lift.config)
     }
   }
 
