@@ -23,7 +23,7 @@
       <PatternLayout pattern="${LOG_PATTERN}"/>
       <Policies>
         <TimeBasedTriggeringPolicy interval="1" modulate="true"/>
-        <SizeBasedTriggeringPolicy size="10MB"/>
+        <SizeBasedTriggeringPolicy size="100MB"/>
       </Policies>
       <DefaultRolloverStrategy max="100">
         <Delete basePath="${APP_LOG_ROOT}" maxDepth="1">
@@ -44,7 +44,7 @@
       <PatternLayout pattern="${LOG_PATTERN}"/>
       <Policies>
         <TimeBasedTriggeringPolicy interval="1" modulate="true"/>
-        <SizeBasedTriggeringPolicy size="10MB"/>
+        <SizeBasedTriggeringPolicy size="100MB"/>
       </Policies>
       <DefaultRolloverStrategy max="10"/>
       <Filters>
@@ -59,7 +59,7 @@
       <PatternLayout pattern="%m%n"/>
       <Policies>
         <TimeBasedTriggeringPolicy interval="1" modulate="true"/>
-        <SizeBasedTriggeringPolicy size="10MB"/>
+        <SizeBasedTriggeringPolicy size="100MB"/>
       </Policies>
       <DefaultRolloverStrategy max="100">
         <Delete basePath="${APP_LOG_ROOT}" maxDepth="1">
