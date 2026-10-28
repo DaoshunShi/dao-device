@@ -46,7 +46,7 @@ object JinBoRecorder {
    */
   fun capture(lr: JinBoRuntime) {
     val liftId = lr.config.id
-    val buttons = JinBoBtnService.buttons(liftId)
+    val buttons = lr.reqs.map { JinBoRequestEntry(it) }
     val reqs = JinBoRequestEntries(lr.reqs.map { JinBoRequestEntry(it) })
     val doors = lr.doors.map { it.copy() }
     val logs = logBuf.remove(liftId).orEmpty().toList()

@@ -3,12 +3,9 @@ package org.dao.device.lift.jinbo
 import org.dao.device.common.JsonHelper
 import org.dao.device.lift.jinbo.event.LiftEvent
 import org.dao.device.lift.jinbo.fe.JinBoEventBus
-import java.util.concurrent.ConcurrentHashMap
 
 /** 电梯按钮与请求队列：呼梯请求入队后，按钮高亮直接从请求队列派生。 */
 object JinBoBtnService {
-  private val replayButtons: MutableMap<String, List<JinBoRequestEntry>> = ConcurrentHashMap()
-  private val realtimeRequests: MutableMap<String, List<JinBoRequestEntry>> = ConcurrentHashMap()
 
   /** TCP/HTTP 请求没有实体按钮，只记录请求队列。 */
   fun press(liftId: String, req: JinBoReq): JinBoResp = request(liftId, req)
@@ -86,13 +83,11 @@ object JinBoBtnService {
 
   private fun updateRequests(liftId: String, reqs: List<JinBoReq>) {
     val entries = reqs.map { req -> JinBoRequestEntry(req) }
-    realtimeRequests[liftId] = entries
     fireButtons(liftId, entries, realtime = true)
     fireRequests(liftId, entries, realtime = true)
   }
 
   fun fireFrame(liftId: String, frame: JinBoFrame) {
-    replayButtons[liftId] = frame.buttons
     fireButtons(liftId, frame.buttons, realtime = false)
     fireRequests(liftId, frame.reqs, realtime = false)
   }
@@ -119,39 +114,8 @@ object JinBoBtnService {
     else -> ""
   }
 
-  /** 回放帧提供自己的按钮状态；实时运行时则从请求队列派生。 */
-  fun buttons(liftId: String): List<JinBoRequestEntry> =
-    if (JinBoEventBus.isReplayMode(liftId)) replayButtons[liftId].orEmpty()
-    else requests(liftId)
-
-  /** 按钮绘制只读取当前服务状态，不依赖可能延迟到达的事件快照。 */
-  fun isInsideActive(liftId: String, floor: Int): Boolean =
-    buttons(liftId).any {
-      it.panel == "LiftInsidePanel" && it.req.destFloor == floor && it.req.type == null && it.action == "呼梯" && it.active
-    }
-
-  fun isTcpActive(liftId: String, floor: Int): Boolean =
-    buttons(liftId).any { it.panel == "LiftTcpPanel" && it.req.destFloor == floor && it.action == "呼梯" && it.active }
-
-  fun isOutsideActive(liftId: String, floor: Int, up: Boolean): Boolean {
-    val direction = if (up) JinBoLiftStatus.Up else JinBoLiftStatus.Down
-    return buttons(liftId).any {
-      it.panel == "LiftOutsidePanel" && it.req.destFloor == floor && it.req.type == direction &&
-        it.action == "呼梯" && it.active
-    }
-  }
-
-  fun requests(liftId: String): List<JinBoRequestEntry> = realtimeRequests[liftId].orEmpty()
-
-  fun reset(liftId: String) {
-    replayButtons.remove(liftId)
-    realtimeRequests.remove(liftId)
-  }
-
   /** 清空呼梯请求及其按钮高亮。 */
   fun clearRequests(liftId: String) {
-    replayButtons.remove(liftId)
-    realtimeRequests.remove(liftId)
     fireButtons(liftId, emptyList(), realtime = true)
     fireRequests(liftId, emptyList(), realtime = true)
   }

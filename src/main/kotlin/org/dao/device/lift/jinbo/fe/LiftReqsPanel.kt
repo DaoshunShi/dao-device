@@ -3,7 +3,6 @@ package org.dao.device.lift.jinbo.fe
 import com.fasterxml.jackson.module.kotlin.jacksonTypeRef
 import org.dao.device.common.GuiEventListener
 import org.dao.device.common.JsonHelper
-import org.dao.device.lift.jinbo.JinBoBtnService
 import org.dao.device.lift.jinbo.JinBoConfig
 import org.dao.device.lift.jinbo.JinBoRequestEntry
 import org.dao.device.lift.jinbo.event.LiftEvent
@@ -24,7 +23,7 @@ class LiftReqsPanel(private val config: JinBoConfig) : JPanel(BorderLayout()), G
   init {
     add(JScrollPane(requestArea), BorderLayout.CENTER)
     JinBoEventBus.register(config.id, this)
-    SwingUtilities.invokeLater { render(JinBoBtnService.requests(config.id)) }
+    SwingUtilities.invokeLater { render(emptyList()) }
   }
 
   override fun onEvent(event: LiftEvent) {

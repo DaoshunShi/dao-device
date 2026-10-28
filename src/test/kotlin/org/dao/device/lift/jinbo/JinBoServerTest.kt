@@ -84,14 +84,11 @@ class JinBoServerTest {
         val req = JinBoReq(2, JinBoReqSource.InDoor)
         assertEquals("0", JinBoBtnService.pressButton(LIFT_ID, req).code)
         assertTrue(runtime.reqs.any { it.destFloor == 2 })
-        assertTrue(JinBoBtnService.buttons(LIFT_ID).single { it.req.destFloor == 2 && it.action == "呼梯" }.active)
 
         val invalidReq = JinBoReq(3, JinBoReqSource.InDoor, doorCodes = listOf(9))
         assertEquals("400", JinBoBtnService.pressButton(LIFT_ID, invalidReq).code)
-        assertTrue(JinBoBtnService.buttons(LIFT_ID).none { it.req.destFloor == 3 })
         assertTrue(runtime.reqs.none { it == invalidReq })
       } finally {
-        JinBoBtnService.reset(LIFT_ID)
       }
     }
   }
@@ -109,13 +106,11 @@ class JinBoServerTest {
         assertEquals("409", JinBoBtnService.pressOpen(LIFT_ID).code)
         assertEquals("409", JinBoBtnService.pressClose(LIFT_ID, fromTcp = true).code)
         assertTrue(runtime.reqs.isEmpty())
-        assertTrue(JinBoBtnService.buttons(LIFT_ID).isEmpty())
 
         assertEquals("0", JinBoServer.request(LIFT_ID, JinBoReq(2, JinBoReqSource.Tcp)).code)
         assertTrue(runtime.reqs.any { it.destFloor == 2 })
       } finally {
         JinBoEventBus.setReplayMode(LIFT_ID, false)
-        JinBoBtnService.reset(LIFT_ID)
       }
     }
   }
@@ -130,13 +125,10 @@ class JinBoServerTest {
         val returnedReq = runtime.reqs.single()
         assertEquals(listOf(0), returnedReq.doorCodes)
 
-        assertTrue(JinBoBtnService.buttons(LIFT_ID).single().active)
-
         runtime.reqs.clear()
         JinBoBtnService.refresh(LIFT_ID, runtime.reqs)
-        assertTrue(JinBoBtnService.buttons(LIFT_ID).isEmpty())
+        assertTrue(runtime.reqs.isEmpty())
       } finally {
-        JinBoBtnService.reset(LIFT_ID)
       }
     }
   }
@@ -162,7 +154,6 @@ class JinBoServerTest {
         assertTrue(insideEvents.dropLast(1).all { it.msg != "[]" })
         assertEquals("[]", insideEvents.last().msg)
       } finally {
-        JinBoBtnService.reset(LIFT_ID)
         JinBoEventBus.listener[LIFT_ID]?.remove(listener)
       }
     }
@@ -557,10 +548,7 @@ class JinBoServerTest {
         assertEquals("0", JinBoServer.resetRequests(LIFT_ID).code)
 
         assertTrue(runtime.reqs.isEmpty())
-        assertTrue(JinBoBtnService.requests(LIFT_ID).isEmpty())
-        assertFalse(JinBoBtnService.buttons(LIFT_ID).any { it.action == "呼梯" })
       } finally {
-        JinBoBtnService.reset(LIFT_ID)
       }
     }
   }

@@ -1,6 +1,8 @@
 package org.dao.device.lift.jinbo.fe
 
+import com.fasterxml.jackson.module.kotlin.jacksonTypeRef
 import org.dao.device.common.GuiEventListener
+import org.dao.device.common.JsonHelper
 import org.dao.device.lift.jinbo.JinBoBtnService
 import org.dao.device.lift.jinbo.JinBoConfig
 import org.dao.device.lift.jinbo.JinBoReq
@@ -20,6 +22,8 @@ class LabelCircle(private val config: JinBoConfig, val floorIdx: Int, val labelS
   ClickAnimatedPanel(),
   GuiEventListener {
 
+  private var active = false
+
   init {
     JinBoEventBus.register(config.id, this)
   }
@@ -38,19 +42,19 @@ class LabelCircle(private val config: JinBoConfig, val floorIdx: Int, val labelS
     withPressedTransform(g2d) {
       val centerX = width / 2
       val centerY = height / 2
-      val active = JinBoBtnService.isInsideActive(config.id, floorIdx)
+      val isActive = active
 
       // 绘制圆圈
-      g2d.color = if (active) Color.BLUE else Color.gray
+      g2d.color = if (isActive) Color.BLUE else Color.gray
       g2d.stroke = BasicStroke(3.0f)
       g2d.drawOval(centerX - circleR, centerY - circleR, circleR * 2, circleR * 2)
-      if (active) {
+      if (isActive) {
         g2d.color = Color.ORANGE
         g2d.fillOval(centerX - circleR, centerY - circleR, circleR * 2, circleR * 2)
       }
 
       // 绘制文本
-      g2d.color = if (active) Color.WHITE else Color.DARK_GRAY
+      g2d.color = if (isActive) Color.WHITE else Color.DARK_GRAY
       g2d.font = Font("Arial", Font.PLAIN, labelSize)
       val fontMetrics = g2d.fontMetrics
       val textWidth = fontMetrics.stringWidth(labelStr)
@@ -61,7 +65,9 @@ class LabelCircle(private val config: JinBoConfig, val floorIdx: Int, val labelS
   }
 
   override fun onEvent(event: LiftEvent) {
-    // 旧事件可能在最新点击之后到达，按钮状态始终从 JinBoBtnService 读取。
-    if (event.topic == "inside") repaint()
+    if (event.topic != "inside") return
+    val reqs = JsonHelper.mapper.readValue(event.msg, jacksonTypeRef<List<JinBoReq>>())
+    active = reqs.any { it.destFloor == floorIdx }
+    repaint()
   }
 }

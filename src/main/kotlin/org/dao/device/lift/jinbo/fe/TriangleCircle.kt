@@ -1,6 +1,8 @@
 package org.dao.device.lift.jinbo.fe
 
+import com.fasterxml.jackson.module.kotlin.jacksonTypeRef
 import org.dao.device.common.GuiEventListener
+import org.dao.device.common.JsonHelper
 import org.dao.device.lift.jinbo.JinBoBtnService
 import org.dao.device.lift.jinbo.JinBoConfig
 import org.dao.device.lift.jinbo.JinBoLiftStatus
@@ -32,6 +34,7 @@ class TriangleCircle(
   // 颜色设置
 
   private val rotationAngle: Double = if (up) -PI / 2 else PI / 2
+  private var active = false
 
   init {
     JinBoEventBus.register(config.id, this)
@@ -57,10 +60,10 @@ class TriangleCircle(
     withPressedTransform(g2d) {
       val centerX = width / 2
       val centerY = height / 2
-      val active = JinBoBtnService.isOutsideActive(config.id, floorIdx, up)
+      val isActive = active
 
       // 绘制圆圈
-      g2d.color = if (active) Color.BLUE else Color.gray
+      g2d.color = if (isActive) Color.BLUE else Color.gray
       g2d.stroke = BasicStroke(3.0f)
       g2d.drawOval(
         centerX - circleRadius,
@@ -73,7 +76,7 @@ class TriangleCircle(
       val triangle = createTriangle(centerX, centerY, triangleSize, rotationAngle)
 
       // 绘制三角形
-      g2d.color = if (active) Color.ORANGE else Color.DARK_GRAY
+      g2d.color = if (isActive) Color.ORANGE else Color.DARK_GRAY
       g2d.fillPolygon(triangle)
       g2d.color = Color.BLACK
       g2d.drawPolygon(triangle)
@@ -100,7 +103,10 @@ class TriangleCircle(
   }
 
   override fun onEvent(event: LiftEvent) {
-    // 旧事件可能在最新点击之后到达，按钮状态始终从 JinBoBtnService 读取。
-    if (event.topic == "outside") repaint()
+    if (event.topic != "outside") return
+    val reqs = JsonHelper.mapper.readValue(event.msg, jacksonTypeRef<List<JinBoReq>>())
+    val direction = if (up) JinBoLiftStatus.Up else JinBoLiftStatus.Down
+    active = reqs.any { it.destFloor == floorIdx && it.type == direction }
+    repaint()
   }
 }
