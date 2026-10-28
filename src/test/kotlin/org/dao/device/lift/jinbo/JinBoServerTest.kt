@@ -1,7 +1,9 @@
 package org.dao.device.lift.jinbo
 
 import org.dao.device.common.JsonHelper
+import org.dao.device.common.GuiEventListener
 import org.dao.device.lift.jinbo.fe.JinBoEventBus
+import org.dao.device.lift.jinbo.event.LiftEvent
 import org.junit.jupiter.api.Test
 import java.io.File
 import java.util.Date
@@ -75,7 +77,7 @@ class JinBoServerTest {
   }
 
   @Test
-  fun `button press is recorded independently from the request queue`() {
+  fun `button press directly enqueues the request`() {
     val runtime = newRuntime(initialFloor = 3)
 
     withLift(runtime) {
@@ -85,12 +87,9 @@ class JinBoServerTest {
         assertTrue(runtime.reqs.any { it.destFloor == 2 })
         assertTrue(JinBoBtnService.buttons(LIFT_ID).single { it.floor == 2 && it.action == "呼梯" }.active)
 
-        val pressedAt = JinBoBtnService.buttons(LIFT_ID).first().pressedAt
         val invalidReq = JinBoReq(3, JinBoReqSource.InDoor, doorCodes = listOf(9))
         assertEquals("400", JinBoBtnService.pressButton(LIFT_ID, invalidReq).code)
-        val invalidButton = JinBoBtnService.buttons(LIFT_ID).single { it.floor == 3 }
-        assertTrue(invalidButton.pressedAt >= pressedAt)
-        assertFalse(invalidButton.active)
+        assertTrue(JinBoBtnService.buttons(LIFT_ID).none { it.floor == 3 })
         assertTrue(runtime.reqs.none { it == invalidReq })
       } finally {
         JinBoBtnService.reset(LIFT_ID)
@@ -123,7 +122,7 @@ class JinBoServerTest {
   }
 
   @Test
-  fun `button highlight follows request consumption without matching resolved door codes`() {
+  fun `request queue supplies the button highlight`() {
     val runtime = newRuntime(initialFloor = 3)
 
     withLift(runtime) {
@@ -132,14 +131,40 @@ class JinBoServerTest {
         val returnedReq = runtime.reqs.single()
         assertEquals(listOf(0), returnedReq.doorCodes)
 
-        JinBoBtnService.release(LIFT_ID, runtime.reqs, runtime.doors)
         assertTrue(JinBoBtnService.buttons(LIFT_ID).single().active)
 
         runtime.reqs.clear()
-        JinBoBtnService.release(LIFT_ID, runtime.reqs, runtime.doors)
-        assertFalse(JinBoBtnService.buttons(LIFT_ID).single().active)
+        JinBoBtnService.refresh(LIFT_ID, runtime.reqs)
+        assertTrue(JinBoBtnService.buttons(LIFT_ID).isEmpty())
       } finally {
         JinBoBtnService.reset(LIFT_ID)
+      }
+    }
+  }
+
+  @Test
+  fun `consuming a request emits cleared button state`() {
+    val runtime = newRuntime(initialFloor = 3)
+    val events = mutableListOf<LiftEvent>()
+    val listener = object : GuiEventListener {
+      override fun onEvent(event: LiftEvent) {
+        events.add(event)
+      }
+    }
+    JinBoEventBus.register(LIFT_ID, listener)
+
+    withLift(runtime) {
+      try {
+        JinBoBtnService.pressButton(LIFT_ID, JinBoReq(2, JinBoReqSource.InDoor))
+        runtime.reqs.clear()
+        JinBoBtnService.refresh(LIFT_ID, runtime.reqs)
+
+        val insideEvents = events.filter { it.topic == "inside" }
+        assertTrue(insideEvents.dropLast(1).all { it.msg != "[]" })
+        assertEquals("[]", insideEvents.last().msg)
+      } finally {
+        JinBoBtnService.reset(LIFT_ID)
+        JinBoEventBus.listener[LIFT_ID]?.remove(listener)
       }
     }
   }
@@ -521,23 +546,20 @@ class JinBoServerTest {
   }
 
   @Test
-  fun `reset clears calls and their highlights without clearing door control buttons`() {
+  fun `reset clears calls and their highlights`() {
     val runtime = newRuntime(doorCount = 2, initialFloor = 2)
 
     withLift(runtime) {
       try {
         JinBoServer.request(LIFT_ID, JinBoReq(3, JinBoReqSource.Tcp, doorCodes = listOf(0, 1)))
         JinBoBtnService.pressButton(LIFT_ID, JinBoReq(3, JinBoReqSource.InDoor))
-        JinBoBtnService.pressClose(LIFT_ID, fromTcp = true)
         assertTrue(runtime.reqs.isNotEmpty())
-        assertTrue(JinBoBtnService.buttons(LIFT_ID).any { it.action == "关门" })
 
         assertEquals("0", JinBoServer.resetRequests(LIFT_ID).code)
 
         assertTrue(runtime.reqs.isEmpty())
         assertTrue(JinBoBtnService.requests(LIFT_ID).isEmpty())
         assertFalse(JinBoBtnService.buttons(LIFT_ID).any { it.action == "呼梯" })
-        assertTrue(JinBoBtnService.buttons(LIFT_ID).any { it.action == "关门" })
       } finally {
         JinBoBtnService.reset(LIFT_ID)
       }

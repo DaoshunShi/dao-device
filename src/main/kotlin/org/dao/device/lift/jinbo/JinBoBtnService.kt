@@ -4,49 +4,29 @@ import org.dao.device.common.JsonHelper
 import org.dao.device.lift.jinbo.event.LiftEvent
 import org.dao.device.lift.jinbo.fe.JinBoEventBus
 import java.util.concurrent.ConcurrentHashMap
-import java.util.concurrent.CopyOnWriteArrayList
-import java.util.concurrent.ExecutorService
-import java.util.concurrent.Executors
 
-/** 电梯按钮与请求队列：按钮按下、按钮高亮和请求入队分别记录。 */
+/** 电梯按钮与请求队列：呼梯请求入队后，按钮高亮直接从请求队列派生。 */
 object JinBoBtnService {
-  private val pressedButtons: MutableMap<String, MutableList<JinBoButton>> = ConcurrentHashMap()
+  private val replayButtons: MutableMap<String, List<JinBoButton>> = ConcurrentHashMap()
   private val requestEntries: MutableMap<String, List<JinBoRequestEntry>> = ConcurrentHashMap()
   private val queuedAt: MutableMap<String, MutableMap<JinBoReq, Long>> = ConcurrentHashMap()
-  private val pendingRequests: MutableSet<PendingRequest> = ConcurrentHashMap.newKeySet()
-  private val clickExecutor: ExecutorService = Executors.newSingleThreadExecutor()
 
   /** TCP/HTTP 请求没有实体按钮，只记录请求队列。 */
   fun press(liftId: String, req: JinBoReq): JinBoResp = request(liftId, req)
 
-  /** 面板按钮先高亮，再提交请求；提交失败时撤销高亮。 */
+  /** 面板按钮与 TCP/HTTP 共用同一入队路径。 */
   fun pressButton(liftId: String, req: JinBoReq): JinBoResp {
     if (JinBoEventBus.isReplayMode(liftId)) return JinBoResp("409", "回放状态下禁止页面呼梯")
-    val (button, pending) = beginCallPress(liftId, req)
-    try {
-      val response = request(liftId, req)
-      if (response.code != "0") recordButton(liftId, button.copy(active = false))
-      return response
-    } finally {
-      pendingRequests.remove(pending)
-    }
+    logCallPress(liftId, req)
+    return request(liftId, req)
   }
 
-  /** GUI 点击专用：EDT 只登记点击反馈，耗时的请求提交交给单线程队列串行执行。 */
+  /** GUI 点击入口；请求直接入队，随后由请求队列刷新按钮高亮。 */
   fun pressButtonLater(liftId: String, req: JinBoReq) {
-    if (JinBoEventBus.isReplayMode(liftId)) return
-    val (button, pending) = beginCallPress(liftId, req)
-    clickExecutor.execute {
-      try {
-        val response = request(liftId, req)
-        if (response.code != "0") recordButton(liftId, button.copy(active = false))
-      } finally {
-        pendingRequests.remove(pending)
-      }
-    }
+    pressButton(liftId, req)
   }
 
-  private fun beginCallPress(liftId: String, req: JinBoReq): Pair<JinBoButton, PendingRequest> {
+  private fun logCallPress(liftId: String, req: JinBoReq) {
     val button = JinBoButton(
       panel = req.source.panelName,
       floor = req.destFloor,
@@ -54,14 +34,10 @@ object JinBoBtnService {
       action = "呼梯",
       pressedAt = System.currentTimeMillis(),
     )
-    val pending = PendingRequest(liftId, button)
     JinBoLogService.logEvent(
       liftId,
       LiftEvent("按钮按下", "电梯=$liftId, 面板=${button.panel}, 楼层=${button.floor}${directionText(button.direction)}"),
     )
-    pendingRequests.add(pending)
-    recordButton(liftId, button)
-    return button to pending
   }
 
   fun pressOpen(liftId: String): JinBoResp {
@@ -89,15 +65,11 @@ object JinBoBtnService {
 
   private fun pressControl(liftId: String, panel: String, action: String, command: () -> JinBoResp): JinBoResp {
     val floor = JinBoServer.lifts[liftId]?.curFloor
-    val button = JinBoButton(panel, floor, null, action, System.currentTimeMillis())
     JinBoLogService.logEvent(
       liftId,
       LiftEvent("按钮按下", "电梯=$liftId, 面板=$panel, 楼层=$floor, 按钮=$action"),
     )
-    recordButton(liftId, button)
-    val response = command()
-    if (response.code != "0") recordButton(liftId, button.copy(active = false))
-    return response
+    return command()
   }
 
   private fun request(liftId: String, req: JinBoReq): JinBoResp {
@@ -109,7 +81,7 @@ object JinBoBtnService {
     return response
   }
 
-  /** 实时运行时刷新请求队列；按钮状态由点击反馈和消费检查分别更新。 */
+  /** 实时运行时刷新请求队列。 */
   fun refresh(liftId: String, reqs: List<JinBoReq>) = updateRequests(liftId, reqs)
 
   /** 请求入队后立即刷新 reqs，不等待下一次仿真 tick。 */
@@ -126,20 +98,9 @@ object JinBoBtnService {
     val entries = reqs.map { req -> JinBoRequestEntry(req, times.getOrPut(req) { now }) }
     times.keys.retainAll(reqs.toSet())
     requestEntries[liftId] = entries
+    fireButtons(liftId, entries.map { it.req.toButton(it.queuedAt) }, realtime = true)
     fireRequests(liftId, entries, realtime = true)
   }
-
-  /** 楼层按钮随请求入队亮起，随请求消费熄灭；开关门按钮按操作状态处理。 */
-  private fun JinBoButton.isNoLongerActive(reqs: List<JinBoReq>, doors: List<JinBoDoor>): Boolean = when (action) {
-    "呼梯" -> reqs.none { req ->
-      req.destFloor == floor && req.type == direction && req.source == panel.source
-    }
-    "开门" -> doors.none { it.status == JinBoDoorStatus.OPENING }
-    else -> doors.any { it.status == JinBoDoorStatus.CLOSING || it.status == JinBoDoorStatus.CLOSE }
-  }
-
-  private val String.source: JinBoReqSource?
-    get() = JinBoReqSource.entries.firstOrNull { it.panelName == this }
 
   private val JinBoReqSource.panelName: String
     get() = when (this) {
@@ -148,17 +109,8 @@ object JinBoBtnService {
       JinBoReqSource.Tcp -> "LiftTcpPanel"
     }
 
-  private fun recordButton(liftId: String, button: JinBoButton) {
-    val list = pressedButtons.getOrPut(liftId) { CopyOnWriteArrayList() }
-    val index = list.indexOfFirst {
-      it.panel == button.panel && it.floor == button.floor && it.direction == button.direction && it.action == button.action
-    }
-    if (index < 0) list.add(button) else list[index] = button
-    fireButtons(liftId, list.toList(), realtime = true)
-  }
-
   fun fireFrame(liftId: String, frame: JinBoFrame) {
-    replaceButtons(liftId, frame.buttons)
+    replayButtons[liftId] = frame.buttons
     fireButtons(liftId, frame.buttons, realtime = false)
     fireRequests(liftId, frame.reqs, realtime = false)
   }
@@ -181,7 +133,7 @@ object JinBoBtnService {
 
   private fun JinBoButton.toReq(): JinBoReq = JinBoReq(
     destFloor = floor ?: 0,
-    source = panel.source ?: JinBoReqSource.Tcp,
+    source = JinBoReqSource.entries.firstOrNull { it.panelName == panel } ?: JinBoReqSource.Tcp,
     type = direction,
   )
 
@@ -191,12 +143,18 @@ object JinBoBtnService {
     else -> ""
   }
 
-  fun buttons(liftId: String): List<JinBoButton> = pressedButtons[liftId]?.toList().orEmpty()
+  /** 回放帧提供自己的按钮状态；实时运行时则从请求队列派生。 */
+  fun buttons(liftId: String): List<JinBoButton> =
+    if (JinBoEventBus.isReplayMode(liftId)) replayButtons[liftId].orEmpty()
+    else requests(liftId).map { it.req.toButton(it.queuedAt) }
 
-  /** 切换到回放帧按钮状态；回放控件统一从该状态绘制。 */
-  private fun replaceButtons(liftId: String, buttons: List<JinBoButton>) {
-    pressedButtons[liftId] = CopyOnWriteArrayList(buttons)
-  }
+  private fun JinBoReq.toButton(pressedAt: Long): JinBoButton = JinBoButton(
+    panel = source.panelName,
+    floor = destFloor,
+    direction = type,
+    action = "呼梯",
+    pressedAt = pressedAt,
+  )
 
   /** 按钮绘制只读取当前服务状态，不依赖可能延迟到达的事件快照。 */
   fun isInsideActive(liftId: String, floor: Int): Boolean =
@@ -215,41 +173,17 @@ object JinBoBtnService {
   fun requests(liftId: String): List<JinBoRequestEntry> = requestEntries[liftId].orEmpty()
 
   fun reset(liftId: String) {
-    pressedButtons.remove(liftId)
+    replayButtons.remove(liftId)
     requestEntries.remove(liftId)
     queuedAt.remove(liftId)
-    pendingRequests.removeIf { it.liftId == liftId }
   }
 
-  /** 清空呼梯请求及其按钮高亮，保留开门、关门等控制操作记录。 */
+  /** 清空呼梯请求及其按钮高亮。 */
   fun clearRequests(liftId: String) {
-    val pressed = pressedButtons[liftId]
-    if (pressed != null) {
-      pressed.removeIf { it.action == "呼梯" }
-      fireButtons(liftId, pressed.toList(), realtime = true)
-    }
+    replayButtons.remove(liftId)
     requestEntries.remove(liftId)
     queuedAt.remove(liftId)
+    fireButtons(liftId, emptyList(), realtime = true)
     fireRequests(liftId, emptyList(), realtime = true)
   }
-
-  /** 按请求队列和门状态更新按钮快照；只在状态实际变化时重绘。 */
-  fun release(liftId: String, reqs: List<JinBoReq>, doors: List<JinBoDoor>) {
-    val pressed = pressedButtons[liftId] ?: return
-    var changed = false
-    pressed.indices.forEach { index ->
-      val button = pressed[index]
-      val pending = PendingRequest(liftId, button) in pendingRequests
-      if (button.active && !pending && button.isNoLongerActive(reqs, doors)) {
-        pressed[index] = button.copy(active = false)
-        changed = true
-      }
-    }
-    if (changed) fireButtons(liftId, pressed.toList(), realtime = true)
-  }
-
-  private data class PendingRequest(
-    val liftId: String,
-    val buttonKey: JinBoButton,
-  )
 }

@@ -8,24 +8,22 @@ import org.dao.device.lift.jinbo.fe.JinBoEventBus
 object JinBoStateService {
   /** 由仿真线程在 tick 内发布；状态事件用于界面更新，不读取运行中的可变对象。 */
   fun publish(lift: JinBoRuntime) {
-    // 回放期间实时仿真仍会录制，但不应覆盖回放画面。
-    if (JinBoEventBus.isReplayMode(lift.config.id)) return
     val reqs = lift.reqs.toList()
     val snapshot = LiftState.capture(lift)
-    JinBoBtnService.release(lift.config.id, reqs, snapshot.doors)
-    fire(
+    fireState(
       liftId = lift.config.id,
       h = snapshot.h,
       liftStatus = snapshot.liftStatus,
       direction = snapshot.direction,
       doors = snapshot.doors,
       emergencyStopped = snapshot.emergencyStopped,
+      realtime = true,
     )
     JinBoBtnService.refresh(lift.config.id, reqs)
   }
 
   fun fireState(liftId: String, frame: JinBoFrame) {
-    fire(
+    fireState(
       liftId = liftId,
       h = frame.h,
       liftStatus = frame.liftStatus,
@@ -36,7 +34,7 @@ object JinBoStateService {
     )
   }
 
-  private fun fire(
+  private fun fireState(
     liftId: String,
     h: Double,
     liftStatus: JinBoLiftStatus,
