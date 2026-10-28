@@ -13,7 +13,6 @@ object JinBoStateService {
     val reqs = lift.reqs.toList()
     val snapshot = LiftState.capture(lift)
     JinBoBtnService.release(lift.config.id, reqs, snapshot.doors)
-    val buttons = JinBoBtnService.buttons(lift.config.id)
     fire(
       liftId = lift.config.id,
       h = snapshot.h,
@@ -22,7 +21,7 @@ object JinBoStateService {
       doors = snapshot.doors,
       emergencyStopped = snapshot.emergencyStopped,
     )
-    JinBoBtnService.refresh(lift.config.id, reqs, buttons)
+    JinBoBtnService.refresh(lift.config.id, reqs)
   }
 
   fun fireState(liftId: String, frame: JinBoFrame) {
@@ -34,17 +33,6 @@ object JinBoStateService {
       doors = frame.doors.ifEmpty { listOf(JinBoDoor(code = 0, status = frame.doorStatus)) },
       emergencyStopped = frame.emergencyStopped,
       realtime = false,
-    )
-  }
-
-  internal fun fireRealtime(liftId: String, frame: JinBoFrame) {
-    fire(
-      liftId = liftId,
-      h = frame.h,
-      liftStatus = frame.liftStatus,
-      direction = frame.direction,
-      doors = frame.doors.ifEmpty { listOf(JinBoDoor(code = 0, status = frame.doorStatus)) },
-      emergencyStopped = frame.emergencyStopped,
     )
   }
 
@@ -70,7 +58,7 @@ object JinBoStateService {
         ),
       ),
     )
-    if (realtime) JinBoEventBus.fireRealtime(liftId, event) else JinBoEventBus.fireReplay(liftId, event)
+    if (realtime) JinBoEventBus.fireRealtime(liftId, event) else JinBoEventBus.fire(liftId, event)
   }
 
   private fun aggregateDoorStatus(doors: List<JinBoDoor>): JinBoDoorStatus =

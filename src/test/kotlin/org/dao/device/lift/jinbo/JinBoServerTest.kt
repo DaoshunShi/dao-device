@@ -107,7 +107,7 @@ class JinBoServerTest {
         JinBoEventBus.setReplayMode(LIFT_ID, true)
 
         assertEquals("409", JinBoBtnService.pressButton(LIFT_ID, JinBoReq(2, JinBoReqSource.InDoor)).code)
-        assertEquals("409", JinBoBtnService.pressOutDoor(LIFT_ID, 2, JinBoLiftStatus.Down).code)
+        assertEquals("409", JinBoBtnService.pressButton(LIFT_ID, JinBoReq(2, JinBoReqSource.OutDoor, JinBoLiftStatus.Down)).code)
         assertEquals("409", JinBoBtnService.pressOpen(LIFT_ID).code)
         assertEquals("409", JinBoBtnService.pressClose(LIFT_ID, fromTcp = true).code)
         assertTrue(runtime.reqs.isEmpty())
@@ -527,7 +527,7 @@ class JinBoServerTest {
     withLift(runtime) {
       try {
         JinBoServer.request(LIFT_ID, JinBoReq(3, JinBoReqSource.Tcp, doorCodes = listOf(0, 1)))
-        JinBoBtnService.pressInDoor(LIFT_ID, 3)
+        JinBoBtnService.pressButton(LIFT_ID, JinBoReq(3, JinBoReqSource.InDoor))
         JinBoBtnService.pressClose(LIFT_ID, fromTcp = true)
         assertTrue(runtime.reqs.isNotEmpty())
         assertTrue(JinBoBtnService.buttons(LIFT_ID).any { it.action == "关门" })

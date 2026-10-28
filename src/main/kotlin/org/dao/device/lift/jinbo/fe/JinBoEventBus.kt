@@ -4,7 +4,6 @@ import org.dao.device.common.GuiEventListener
 import org.dao.device.lift.jinbo.event.LiftEvent
 import java.util.concurrent.ConcurrentHashMap
 import java.util.concurrent.CopyOnWriteArrayList
-import javax.swing.SwingUtilities
 
 object JinBoEventBus {
   var listener: MutableMap<String, MutableList<GuiEventListener>> = ConcurrentHashMap()
@@ -17,15 +16,6 @@ object JinBoEventBus {
 
   fun fire(topic: String, event: LiftEvent) {
     listener[topic]?.forEach { it.onEvent(event) }
-  }
-
-  /** 始终向界面投递事件；回放帧和按钮点击反馈都要绕过实时回放抑制。 */
-  fun fireReplay(topic: String, event: LiftEvent) {
-    fire(topic, event)
-  }
-
-  fun fireReplayAsync(topic: String, event: LiftEvent) {
-    SwingUtilities.invokeLater { fireReplay(topic, event) }
   }
 
   /** 回放期间，实时事件只更新仿真和录制，不刷新已切换到回放数据的界面。 */

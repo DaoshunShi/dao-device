@@ -320,7 +320,7 @@ class JinBoReplayerTest {
       try {
         JinBoEventBus.setReplayMode(LIFT_ID, true)
         JinBoEventBus.fireRealtime(LIFT_ID, LiftEvent("liftState", "realtime"))
-        JinBoEventBus.fireReplay(LIFT_ID, LiftEvent("liftState", "replay"))
+        JinBoEventBus.fire(LIFT_ID, LiftEvent("liftState", "replay"))
 
         assertEquals(listOf("replay"), stateEvents.map { it.msg })
       } finally {

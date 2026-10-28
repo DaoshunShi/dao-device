@@ -22,20 +22,7 @@ object JinBoBtnService {
   /** 面板按钮先高亮，再提交请求；提交失败时撤销高亮。 */
   fun pressButton(liftId: String, req: JinBoReq): JinBoResp {
     if (JinBoEventBus.isReplayMode(liftId)) return JinBoResp("409", "回放状态下禁止页面呼梯")
-    val button = JinBoButton(
-      panel = req.source.panelName,
-      floor = req.destFloor,
-      direction = req.type,
-      action = "呼梯",
-      pressedAt = System.currentTimeMillis(),
-    )
-    val pending = PendingRequest(liftId, button)
-    JinBoLogService.logEvent(
-      liftId,
-      LiftEvent("按钮按下", "电梯=$liftId, 面板=${button.panel}, 楼层=${button.floor}${directionText(button.direction)}"),
-    )
-    pendingRequests.add(pending)
-    recordButton(liftId, button)
+    val (button, pending) = beginCallPress(liftId, req)
     try {
       val response = request(liftId, req)
       if (response.code != "0") recordButton(liftId, button.copy(active = false))
@@ -48,6 +35,18 @@ object JinBoBtnService {
   /** GUI 点击专用：EDT 只登记点击反馈，耗时的请求提交交给单线程队列串行执行。 */
   fun pressButtonLater(liftId: String, req: JinBoReq) {
     if (JinBoEventBus.isReplayMode(liftId)) return
+    val (button, pending) = beginCallPress(liftId, req)
+    clickExecutor.execute {
+      try {
+        val response = request(liftId, req)
+        if (response.code != "0") recordButton(liftId, button.copy(active = false))
+      } finally {
+        pendingRequests.remove(pending)
+      }
+    }
+  }
+
+  private fun beginCallPress(liftId: String, req: JinBoReq): Pair<JinBoButton, PendingRequest> {
     val button = JinBoButton(
       panel = req.source.panelName,
       floor = req.destFloor,
@@ -62,21 +61,8 @@ object JinBoBtnService {
     )
     pendingRequests.add(pending)
     recordButton(liftId, button)
-    clickExecutor.execute {
-      try {
-        val response = request(liftId, req)
-        if (response.code != "0") recordButton(liftId, button.copy(active = false))
-      } finally {
-        pendingRequests.remove(pending)
-      }
-    }
+    return button to pending
   }
-
-  fun pressInDoor(liftId: String, floor: Int): JinBoResp =
-    pressButton(liftId, JinBoReq(floor, JinBoReqSource.InDoor))
-
-  fun pressOutDoor(liftId: String, floor: Int, direction: JinBoLiftStatus): JinBoResp =
-    pressButton(liftId, JinBoReq(floor, JinBoReqSource.OutDoor, direction))
 
   fun pressOpen(liftId: String): JinBoResp {
     if (JinBoEventBus.isReplayMode(liftId)) return JinBoResp("409", "回放状态下禁止页面开门")
@@ -123,12 +109,8 @@ object JinBoBtnService {
     return response
   }
 
-  /** 实时运行时刷新按钮快照与请求队列。 */
-  fun refresh(liftId: String, reqs: List<JinBoReq>, buttons: List<JinBoButton>) {
-    if (JinBoServer.lifts[liftId] == null) return
-    updateRequests(liftId, reqs)
-    fireButtons(liftId, buttons, realtime = true)
-  }
+  /** 实时运行时刷新请求队列；按钮状态由点击反馈和消费检查分别更新。 */
+  fun refresh(liftId: String, reqs: List<JinBoReq>) = updateRequests(liftId, reqs)
 
   /** 请求入队后立即刷新 reqs，不等待下一次仿真 tick。 */
   private fun refreshRequests(liftId: String) {
@@ -186,14 +168,14 @@ object JinBoBtnService {
     val outside = active.filter { it.panel == "LiftOutsidePanel" }.map { it.toReq() }
     val inside = active.filter { it.panel == "LiftInsidePanel" && it.action == "呼梯" }.map { it.toReq() }
     val tcp = active.filter { it.panel == "LiftTcpPanel" }.map { it.toReq() }
-    val fire = if (realtime) JinBoEventBus::fireRealtime else JinBoEventBus::fireReplay
+    val fire = if (realtime) JinBoEventBus::fireRealtime else JinBoEventBus::fire
     fire(liftId, LiftEvent("outside", JsonHelper.mapper.writeValueAsString(outside)))
     fire(liftId, LiftEvent("inside", JsonHelper.mapper.writeValueAsString(inside)))
     fire(liftId, LiftEvent("tcp", JsonHelper.mapper.writeValueAsString(tcp)))
   }
 
   private fun fireRequests(liftId: String, entries: List<JinBoRequestEntry>, realtime: Boolean) {
-    val fire = if (realtime) JinBoEventBus::fireRealtime else JinBoEventBus::fireReplay
+    val fire = if (realtime) JinBoEventBus::fireRealtime else JinBoEventBus::fire
     fire(liftId, LiftEvent("reqs", JsonHelper.mapper.writeValueAsString(entries)))
   }
 
@@ -212,7 +194,7 @@ object JinBoBtnService {
   fun buttons(liftId: String): List<JinBoButton> = pressedButtons[liftId]?.toList().orEmpty()
 
   /** 切换到回放帧按钮状态；回放控件统一从该状态绘制。 */
-  fun replaceButtons(liftId: String, buttons: List<JinBoButton>) {
+  private fun replaceButtons(liftId: String, buttons: List<JinBoButton>) {
     pressedButtons[liftId] = CopyOnWriteArrayList(buttons)
   }
 

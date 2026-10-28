@@ -11,11 +11,7 @@ import java.awt.Color
 import java.awt.Font
 import java.awt.Graphics
 import java.awt.Graphics2D
-import java.awt.Polygon
 import java.awt.RenderingHints
-import kotlin.math.PI
-import kotlin.math.cos
-import kotlin.math.sin
 
 /**
  * 圆形内套文本，用于电梯内去指定楼层
@@ -62,24 +58,6 @@ class LabelCircle(private val config: JinBoConfig, val floorIdx: Int, val labelS
       g2d.drawString(labelStr, (width - textWidth) / 2, (height - textHeight) / 2 + fontMetrics.ascent)
     }
     paintPressedOverlay(g2d)
-  }
-
-  /**
-   * 创建三角形
-   * 顺时针转的
-   */
-  private fun createTriangle(centerX: Int, centerY: Int, size: Int, rotation: Double): Polygon {
-    val xPoints = IntArray(3)
-    val yPoints = IntArray(3)
-
-    // 计算三角形的三个顶点
-    for (i in 0 until 3) {
-      val angle = rotation + 2 * PI * i / 3
-      xPoints[i] = (centerX + size * cos(angle)).toInt()
-      yPoints[i] = (centerY + size * sin(angle)).toInt()
-    }
-
-    return Polygon(xPoints, yPoints, 3)
   }
 
   override fun onEvent(event: LiftEvent) {
