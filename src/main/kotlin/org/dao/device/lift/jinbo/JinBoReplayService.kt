@@ -90,7 +90,7 @@ class JinBoReplayService(private val liftId: String) {
     val render = Runnable {
       if (generation != expectedGeneration) return@Runnable
       JinBoStateService.fireState(liftId, frame)
-      JinBoBtnService.fireFrame(liftId, frame)
+      JinBoStateService.fireFrame(liftId, frame)
       onFrameChanged?.invoke(frames, index, clockTs)
     }
     if (SwingUtilities.isEventDispatchThread()) render.run() else SwingUtilities.invokeLater(render)

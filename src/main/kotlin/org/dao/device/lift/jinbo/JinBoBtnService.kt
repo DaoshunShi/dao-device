@@ -65,40 +65,15 @@ object JinBoBtnService {
     val response = JinBoServer.request(liftId, req)
     if (response.code == "0") {
       JinBoLogService.logEvent(liftId, LiftEvent(req.source.name, JsonHelper.writeValueAsString(req)))
-      refreshFromRuntime(liftId)
+      refreshRequests(liftId)
     }
     return response
   }
 
-  /** 实时运行时刷新请求队列。 */
-  fun refresh(liftId: String, reqs: List<JinBoReq>) {
-    val entries = reqs.map { JinBoRequestEntry(it) }
-    fire(liftId, buttons = entries, reqs = entries, realtime = true)
-  }
-
   /** 请求入队后立即刷新 reqs，不等待下一次仿真 tick。 */
-  private fun refreshFromRuntime(liftId: String) {
+  private fun refreshRequests(liftId: String) {
     val lift = JinBoServer.lifts[liftId] ?: return
     // 请求队列使用 CopyOnWriteArrayList，直接读取时无需等待 processLift 的电梯锁。
-    refresh(liftId, lift.reqs.toList())
+    JinBoStateService.publishRequests(liftId, lift.reqs.toList())
   }
-
-  fun fireFrame(liftId: String, frame: JinBoFrame) {
-    fire(liftId, buttons = frame.buttons, reqs = frame.reqs, realtime = false)
-  }
-
-  private fun fire(liftId: String, buttons: List<JinBoRequestEntry>, reqs: List<JinBoRequestEntry>, realtime: Boolean) {
-    val active = buttons.filter { it.active }
-    val outside = active.filter { it.panel == "LiftOutsidePanel" }.map { it.req }
-    val inside = active.filter { it.panel == "LiftInsidePanel" && it.action == "呼梯" }.map { it.req }
-    val tcp = active.filter { it.panel == "LiftTcpPanel" }.map { it.req }
-    val fire = if (realtime) JinBoEventBus::fireRealtime else JinBoEventBus::fire
-    fire(liftId, LiftEvent("outside", JsonHelper.mapper.writeValueAsString(outside)))
-    fire(liftId, LiftEvent("inside", JsonHelper.mapper.writeValueAsString(inside)))
-    fire(liftId, LiftEvent("tcp", JsonHelper.mapper.writeValueAsString(tcp)))
-    fire(liftId, LiftEvent("reqs", JsonHelper.mapper.writeValueAsString(reqs)))
-  }
-
-  /** 清空呼梯请求及其按钮高亮。 */
-  fun clearRequests(liftId: String) = refresh(liftId, emptyList())
 }

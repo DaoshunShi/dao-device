@@ -6,6 +6,7 @@ import org.dao.device.common.JsonHelper
 import org.dao.device.lift.jinbo.JinBoConstants
 import org.dao.device.lift.jinbo.JinBoFrame
 import org.dao.device.lift.jinbo.JinBoConfig
+import org.dao.device.lift.jinbo.JinBoDoorStatus
 import org.dao.device.lift.jinbo.JinBoLiftStatus
 import org.dao.device.lift.jinbo.JinBoLogService
 import org.dao.device.lift.jinbo.JinBoServer
@@ -63,7 +64,7 @@ class LiftFrame(val config: JinBoConfig) : JFrame("JinBo Lift Monitor"), GuiEven
     }
 
     val cpLeft = createLiftPanel("楼层", Color.PINK, LiftOutsidePanel(config))
-    val cpCenter = createLiftPanel("当前位置", Color.WHITE, LiftPositionPanel(config))
+    val cpCenter = createLiftPanel("当前位置", Color.WHITE, Cage(config, 64, 44, 0.0, JinBoDoorStatus.CLOSE))
     val cpRight = createLiftPanel("梯内", Color.ORANGE, LiftInsidePanel(config))
     val cpRight2 = createLiftPanel("TCP", Color.GREEN, LiftTcpPanel(config))
     val cpRight3 = createLiftPanel("reqs", Color.CYAN, LiftReqsPanel(config))
@@ -112,7 +113,7 @@ class LiftFrame(val config: JinBoConfig) : JFrame("JinBo Lift Monitor"), GuiEven
       // 回放模式下暂停实时拉取，界面由 replayer 驱动
       if (JinBoEventBus.isReplayMode(config.id)) return@Timer
       if (showLiftStatus) {
-        val str = JinBoFetcher.fetch(config.id)
+        val str = JinBoServer.lifts[config.id]?.let { JsonHelper.writeValueAsString(it) }.orEmpty()
         logEvent(LiftEvent("${config.id}-状态", str))
       }
     }.apply { start() }

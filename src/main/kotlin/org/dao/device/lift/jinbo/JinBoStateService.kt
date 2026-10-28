@@ -19,7 +19,7 @@ object JinBoStateService {
       emergencyStopped = snapshot.emergencyStopped,
       realtime = true,
     )
-    JinBoBtnService.refresh(lift.config.id, reqs)
+    publishRequests(lift.config.id, reqs)
   }
 
   fun fireState(liftId: String, frame: JinBoFrame) {
@@ -32,6 +32,29 @@ object JinBoStateService {
       emergencyStopped = frame.emergencyStopped,
       realtime = false,
     )
+  }
+
+  /** 发布实时请求队列和按钮高亮事件。 */
+  fun publishRequests(liftId: String, reqs: List<JinBoReq>) {
+    val entries = reqs.map { JinBoRequestEntry(it) }
+    fire(liftId, buttons = entries, reqs = entries, realtime = true)
+  }
+
+  /** 发布回放帧中的按钮高亮和请求队列事件。 */
+  fun fireFrame(liftId: String, frame: JinBoFrame) {
+    fire(liftId, buttons = frame.buttons, reqs = frame.reqs, realtime = false)
+  }
+
+  private fun fire(liftId: String, buttons: List<JinBoRequestEntry>, reqs: List<JinBoRequestEntry>, realtime: Boolean) {
+    val active = buttons.filter { it.active }
+    val outside = active.filter { it.panel == "LiftOutsidePanel" }.map { it.req }
+    val inside = active.filter { it.panel == "LiftInsidePanel" && it.action == "呼梯" }.map { it.req }
+    val tcp = active.filter { it.panel == "LiftTcpPanel" }.map { it.req }
+    val fire = if (realtime) JinBoEventBus::fireRealtime else JinBoEventBus::fire
+    fire(liftId, LiftEvent("outside", JsonHelper.mapper.writeValueAsString(outside)))
+    fire(liftId, LiftEvent("inside", JsonHelper.mapper.writeValueAsString(inside)))
+    fire(liftId, LiftEvent("tcp", JsonHelper.mapper.writeValueAsString(tcp)))
+    fire(liftId, LiftEvent("reqs", JsonHelper.mapper.writeValueAsString(reqs)))
   }
 
   private fun fireState(

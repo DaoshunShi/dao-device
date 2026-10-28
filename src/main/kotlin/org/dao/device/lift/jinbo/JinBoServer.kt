@@ -244,7 +244,7 @@ object JinBoServer {
     withLiftLock(lift, "JinBoServer.resetRequests") {
       lift.reqs.clear()
     }
-    JinBoBtnService.clearRequests(liftId)
+    JinBoStateService.publishRequests(liftId, emptyList())
     JinBoLogService.logEvent(liftId, LiftEvent("重置", "$liftId 已清空所有呼梯请求"))
     return JinBoResp()
   }
