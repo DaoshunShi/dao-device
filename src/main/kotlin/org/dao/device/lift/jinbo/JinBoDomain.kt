@@ -84,11 +84,7 @@ enum class JinBoLiftStatus {
  *
  * [openStatus] 是外部查询协议值；[displayColor] 是电梯图形中此状态的背景色。
  */
-enum class JinBoDoorStatus(
-  val openStatus: Int,
-  val displayColor: Color,
-  val displayPriority: Int,
-) {
+enum class JinBoDoorStatus(val openStatus: Int, val displayColor: Color, val displayPriority: Int) {
   ERROR(openStatus = 0, displayColor = Color.DARK_GRAY, displayPriority = 0),
   OPENING(openStatus = 3, displayColor = Color.LIGHT_GRAY, displayPriority = 1),
   CLOSING(openStatus = 4, displayColor = Color.YELLOW, displayPriority = 1),
@@ -188,7 +184,7 @@ data class JinBoDoor(
   fun startClosing(now: Date) {
     when (status) {
       JinBoDoorStatus.OPENING, JinBoDoorStatus.OPEN -> setStatus(JinBoDoorStatus.CLOSING, now)
-      JinBoDoorStatus.CLOSE, JinBoDoorStatus.CLOSING, JinBoDoorStatus.ERROR -> Unit
+      JinBoDoorStatus.CLOSE, JinBoDoorStatus.CLOSING, JinBoDoorStatus.ERROR -> {}
     }
   }
 
@@ -197,7 +193,7 @@ data class JinBoDoor(
     when (status) {
       JinBoDoorStatus.OPEN -> openOn = now
       JinBoDoorStatus.CLOSING -> startOpening(now)
-      else -> Unit
+      else -> {}
     }
   }
 
@@ -238,10 +234,7 @@ data class JinBoFrame(
 )
 
 /** 回放游标所在位置：时间轴使用 [clockTs]，日志与状态展示使用该时刻对应的 [frame]。 */
-data class JinBoReplayPosition(
-  val frameIndex: Int,
-  val clockTs: Long,
-)
+data class JinBoReplayPosition(val frameIndex: Int, val clockTs: Long)
 
 /** 实时电梯的一次可视化快照，供 UI 广播和回放录制共用。 */
 data class JinBoSnapshot(
