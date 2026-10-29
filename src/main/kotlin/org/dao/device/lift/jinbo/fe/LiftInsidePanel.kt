@@ -1,7 +1,6 @@
 package org.dao.device.lift.jinbo.fe
 
 import org.dao.device.lift.jinbo.JinBoConfig
-import org.dao.device.lift.jinbo.enabledFloors
 import org.dao.device.lift.jinbo.JinBoCommandService
 import org.dao.device.lift.jinbo.JinBoReqSource
 import java.awt.BorderLayout

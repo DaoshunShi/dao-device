@@ -38,6 +38,12 @@ data class JinBoConfig(
       require(!floor.disabled) { "启动楼层 $initialFloor 已停用" }
     }
   }
+
+  /** 电梯面板常用的启用楼层列表：过滤停用层，并按楼层索引从高到低排列。 */
+  fun enabledFloors(): List<JinBoFloor> = floors.filter { !it.disabled }.sortedByDescending { it.index }
+
+  /** 移动计算使用的启用楼层：过滤停用层，并按高度从低到高排列。 */
+  fun enabledFloorsByHeight(): List<JinBoFloor> = floors.filter { !it.disabled }.sortedBy { it.height }
 }
 
 data class JinBoFloor(
@@ -46,9 +52,6 @@ data class JinBoFloor(
   val height: Double, // 楼层高度
   val disabled: Boolean = false, // 此层电梯停用
 )
-
-/** 电梯面板常用的启用楼层列表：过滤停用层，并按楼层索引从高到低排列。 */
-fun JinBoConfig.enabledFloors(): List<JinBoFloor> = floors.filter { !it.disabled }.sortedByDescending { it.index }
 
 // -----------------------------------------------------------------------------
 // 电梯状态、方向与门状态
@@ -66,6 +69,14 @@ enum class JinBoLiftStatus {
     Down -> Up
     Idle -> Idle
   }
+
+  /** 移动方向对应的高度变化符号；Idle 状态不应移动。 */
+  val heightMultiplier: Int
+    get() = when (this) {
+      Up -> 1
+      Down -> -1
+      Idle -> error("Idle 状态不应进入移动步骤")
+    }
 }
 
 /**
