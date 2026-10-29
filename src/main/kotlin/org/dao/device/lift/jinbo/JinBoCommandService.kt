@@ -37,7 +37,7 @@ object JinBoCommandService {
             }
             if (req.destFloor == lift.curFloor &&
               isAtFloorHeight(lift, req.destFloor) &&
-              JinBoDirection.arrivalMatches(lift.config, resolvedReq, lift.direction)
+              JinBoDirectionHelper.arrivalMatches(lift.config, resolvedReq, lift.direction)
             ) {
               JinBoDoorService.refreshSameFloorTimer(lift, resolvedReq.doorCodes)
             }

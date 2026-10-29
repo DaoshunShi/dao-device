@@ -84,7 +84,7 @@ object JinBoMoveService {
     val direction = if (lift.liftStatus == JinBoLiftStatus.Idle) lift.direction else lift.liftStatus
     lift.reqs.removeIf { req ->
       req.destFloor == lift.curFloor &&
-        (direction == JinBoLiftStatus.Idle || JinBoDirection.arrivalMatches(lift.config, req, direction)) &&
+        (direction == JinBoLiftStatus.Idle || JinBoDirectionHelper.arrivalMatches(lift.config, req, direction)) &&
         req.doorCodes.ifEmpty { listOf(0) }.all { code ->
           lift.doors.firstOrNull { it.code == code }?.status == JinBoDoorStatus.OPEN
         }
@@ -93,7 +93,7 @@ object JinBoMoveService {
 
   private fun matchingDoorCodes(lift: JinBoRuntime, direction: JinBoLiftStatus): List<Int> {
     return lift.reqs
-      .filter { it.destFloor == lift.curFloor && JinBoDirection.arrivalMatches(lift.config, it, direction) }
+      .filter { it.destFloor == lift.curFloor && JinBoDirectionHelper.arrivalMatches(lift.config, it, direction) }
       .flatMap { it.doorCodes.ifEmpty { listOf(0) } }
       .ifEmpty { emptyList() }
   }

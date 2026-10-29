@@ -6,13 +6,7 @@ package org.dao.device.lift.jinbo
  * 外部呼梯与前进方向不一致时不能停靠；顶层向下、底层向上的呼梯在端点
  * 仍允许服务，避免端点呼梯永久留在队列中。
  */
-object JinBoDirection {
-  /** 判断呼梯是否属于指定运行方向的后续任务。 */
-  fun requestMatches(req: JinBoReq, direction: JinBoLiftStatus): Boolean =
-    req.source != JinBoReqSource.OutDoor ||
-      req.type == null ||
-      req.type == direction
-
+object JinBoDirectionHelper {
   /** 判断电梯以 [arrivalDirection] 到达目标楼层时，能否服务该呼梯。 */
   fun arrivalMatches(config: JinBoConfig, req: JinBoReq, arrivalDirection: JinBoLiftStatus): Boolean {
     if (req.source != JinBoReqSource.OutDoor || req.type == null) return true
