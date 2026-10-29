@@ -76,10 +76,24 @@ data class JinBoRuntime(
   /** 电梯是否正在驶向其他楼层；移动中的门操作应被拒绝。 */
   fun isMoving(): Boolean = liftStatus != JinBoLiftStatus.Idle
 
+  /** 设置下一运行方向；Idle 时同时清空上次移动时间。 */
+  fun applyNextDirection(nextDirection: JinBoLiftStatus) {
+    liftStatus = nextDirection
+    direction = nextDirection
+    if (nextDirection == JinBoLiftStatus.Idle) lastMoveOn = null
+  }
+
   /** 当前高度允许开门的启用楼层编号；高度差超过容差时返回 null。 */
   fun floorForOpening(): Int? = config.floors.firstOrNull {
     !it.disabled && abs(h - it.height) <= JinBoConstants.FLOOR_EPSILON
   }?.index
+
+  /** 根据当前高度向下取所在可停靠楼层，并同步 [curFloor]；与电梯运行方向无关。 */
+  fun refreshFloorByH(): JinBoFloor? {
+    val floor = config.floors.lastOrNull { !it.disabled && it.height <= h } ?: return null
+    curFloor = floor.index
+    return floor
+  }
 
   /** 是否存在已经打开的门。 */
   fun hasOpenDoor(): Boolean = doors.any { it.status == JinBoDoorStatus.OPEN }
