@@ -4,6 +4,7 @@ import org.dao.device.common.JsonHelper
 import org.dao.device.lift.jinbo.event.LiftEvent
 import org.dao.device.lift.jinbo.fe.JinBoEventBus
 import java.util.Date
+import kotlin.math.abs
 
 /** 电梯统一命令入口：HTTP、TCP、页面按钮都通过这里调用业务命令。 */
 object JinBoCommandService {
@@ -34,7 +35,10 @@ object JinBoCommandService {
             if (lift.reqs.none { it == resolvedReq }) {
               lift.reqs.add(resolvedReq)
             }
-            if (req.destFloor == lift.curFloor && JinBoDirection.arrivalMatches(lift.config, resolvedReq, lift.direction)) {
+            if (req.destFloor == lift.curFloor &&
+              isAtFloorHeight(lift, req.destFloor) &&
+              JinBoDirection.arrivalMatches(lift.config, resolvedReq, lift.direction)
+            ) {
               JinBoDoorService.refreshSameFloorTimer(lift, resolvedReq.doorCodes)
             }
             JinBoResp()
@@ -73,7 +77,6 @@ object JinBoCommandService {
       if (lift.emc) return JinBoResp("409", "电梯处于急停状态")
       val now = Date()
       lift.doors.forEach { it.startClosing(now) }
-      lift.targetFloor = null
       return JinBoResp()
     }
   }
@@ -132,7 +135,7 @@ object JinBoCommandService {
         doorStatus = lift.doors.firstOrNull { it.status != JinBoDoorStatus.CLOSE }?.status ?: JinBoDoorStatus.CLOSE,
         emergencyStopped = lift.emc,
         doors = lift.doors.map { JinBoDoorResp(it.code, it.status.openStatus) },
-        destFloor = lift.targetFloor,
+        destFloor = null,
         disabled = lift.config.disabled,
         fault = lift.emc,
       )
@@ -184,6 +187,11 @@ object JinBoCommandService {
   private fun refreshRequests(liftId: String) {
     val lift = JinBoServer.lifts[liftId] ?: return
     JinBoStateService.publish(liftId, JinBoSnapshot.capture(lift))
+  }
+
+  private fun isAtFloorHeight(lift: JinBoRuntime, floorIndex: Int): Boolean {
+    val floor = lift.config.floors.firstOrNull { it.index == floorIndex } ?: return false
+    return abs(floor.height - lift.h) < JinBoConstants.FLOOR_EPSILON
   }
 
 }

@@ -63,24 +63,28 @@ object JinBoServer {
       lr.doors.forEach { it.advance(now, lr.config) }
       if (!lr.isMoving()) JinBoMoveService.cleanOpenedFloorReq(lr)
 
-      if (lr.targetFloor == null) {
+      if (!lr.isMoving()) {
         if (lr.hasOpenDoor()) {
-          JinBoRequestSelector.selectDirectionDuringDoorHold(lr)
+          val nextDirection = JinBoRequestSelector.selectDirectionDuringDoorHold(lr)
+          if (nextDirection != null) lr.direction = nextDirection
         } else if (!lr.holdAtCurrentFloor()) {
-          JinBoRequestSelector.selectBetterReq(lr)
+          val currentDoorCodes = JinBoRequestSelector.doorCodesForCurrentFloor(lr)
+          if (currentDoorCodes.isNotEmpty()) {
+            JinBoDoorService.open(lr, currentDoorCodes)
+          } else {
+            val nextDirection = JinBoRequestSelector.selectNextDirection(lr)
+            lr.liftStatus = nextDirection
+            lr.direction = nextDirection
+          }
         }
-      }
-
-      JinBoRequestSelector.retargetNearerFloor(lr)
-
-      if (lr.targetFloor != null && lr.targetFloor != lr.curFloor) {
+      } else {
         lr.doors.forEach { it.startClosing(now) }
         if (lr.allDoorsClosed()) {
           JinBoMoveService.advance(lr)
+          JinBoMoveService.arrive(lr)
         }
       }
 
-      JinBoMoveService.arrive(lr)
       JinBoSnapshot.capture(lr)
     }
 

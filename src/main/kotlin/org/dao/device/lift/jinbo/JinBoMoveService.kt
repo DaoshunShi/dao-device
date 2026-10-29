@@ -12,58 +12,103 @@ object JinBoMoveService {
     if (floor != null && abs(floor.height - lift.h) < JinBoConstants.FLOOR_EPSILON) lift.curFloor = floor.index
   }
 
-  /** 按当前速度推进一帧；门未全部关闭或没有目标楼层时不移动。 */
+  /** 按当前速度沿方向推进；会逐层通过楼层，稍后由 [arrive] 判断是否停车。 */
   fun advance(lift: JinBoRuntime) {
     if (!lift.isMoving() || !lift.allDoorsClosed()) return
 
-    val target = lift.config.floors.firstOrNull { it.index == lift.targetFloor } ?: return
     val now = System.currentTimeMillis()
     val elapsedSeconds = lift.lastMoveOn?.let { (now - it) / 1000.0 } ?: JinBoConstants.DEFAULT_MOVE_SECONDS
     lift.lastMoveOn = now
-    val stepHeight = lift.config.liftSpeed * elapsedSeconds.coerceIn(0.0, JinBoConstants.MAX_STEP_SECONDS)
+    var remainingHeight = lift.config.liftSpeed * elapsedSeconds.coerceIn(0.0, JinBoConstants.MAX_STEP_SECONDS)
 
-    when (lift.liftStatus) {
-      JinBoLiftStatus.Up -> {
-        lift.h = minOf(lift.h + stepHeight, target.height)
-        lift.config.floors.lastOrNull { it.height <= lift.h }?.index?.let { lift.curFloor = it }
+    while (remainingHeight > 0) {
+      val next = nextFloor(lift) ?: break
+      val distance = kotlin.math.abs(next.height - lift.h)
+      when (lift.liftStatus) {
+        JinBoLiftStatus.Up -> {
+          if (remainingHeight + JinBoConstants.FLOOR_EPSILON >= distance) {
+            lift.h = next.height
+            lift.curFloor = next.index
+            remainingHeight -= distance
+          } else {
+            lift.h += remainingHeight
+            remainingHeight = 0.0
+          }
+        }
+
+        JinBoLiftStatus.Down -> {
+          if (remainingHeight + JinBoConstants.FLOOR_EPSILON >= distance) {
+            lift.h = next.height
+            lift.curFloor = next.index
+            remainingHeight -= distance
+          } else {
+            lift.h -= remainingHeight
+            remainingHeight = 0.0
+          }
+        }
+
+        JinBoLiftStatus.Idle -> Unit
       }
-
-      JinBoLiftStatus.Down -> {
-        lift.h = maxOf(lift.h - stepHeight, target.height)
-        lift.config.floors.firstOrNull { it.height >= lift.h }?.index?.let { lift.curFloor = it }
-      }
-
-      JinBoLiftStatus.Idle -> {
-        lift.curFloor = lift.config.floors.minBy { abs(it.height - lift.h) }.index
+      if (matchingDoorCodes(lift, lift.liftStatus).isNotEmpty()) return
+      val nextDirection = JinBoRequestSelector.selectNextDirection(lift)
+      if (nextDirection != lift.liftStatus) {
+        lift.liftStatus = nextDirection
+        lift.direction = nextDirection
+        return
       }
     }
   }
 
-  /** 到站后开启请求对应的门；只有门真正打开后，呼梯请求才会由 [cleanOpenedFloorReq] 清理。 */
+  /** 到达当前楼层后判断是否应停车开门；没有对应请求时继续运行或在端点切换方向。 */
   fun arrive(lift: JinBoRuntime) {
-    if (lift.curFloor != lift.targetFloor) return
+    if (!lift.isMoving()) return
 
-    val direction = if (lift.liftStatus == JinBoLiftStatus.Idle) lift.direction else lift.liftStatus
-    val doorCodes = lift.reqs
-      .filter { it.destFloor == lift.curFloor && JinBoDirection.arrivalMatches(lift.config, it, direction) }
-      .flatMap { it.doorCodes }
-      .ifEmpty { listOf(0) }
-    lift.liftStatus = JinBoLiftStatus.Idle
-    lift.targetFloor = null
-    lift.lastMoveOn = null
-    JinBoDoorService.open(lift, doorCodes)
+    val direction = lift.liftStatus
+    val doorCodes = matchingDoorCodes(lift, direction)
+
+    if (doorCodes.isNotEmpty()) {
+      lift.liftStatus = JinBoLiftStatus.Idle
+      lift.lastMoveOn = null
+      JinBoDoorService.open(lift, doorCodes)
+      return
+    }
+
+    val nextDirection = JinBoRequestSelector.selectNextDirection(lift)
+    lift.liftStatus = nextDirection
+    lift.direction = nextDirection
+    if (nextDirection == JinBoLiftStatus.Idle) lift.lastMoveOn = null
   }
 
   /** 当前楼层指定门已经打开时，才视为完成对应的呼梯请求。 */
   fun cleanOpenedFloorReq(lift: JinBoRuntime) {
+    val direction = if (lift.liftStatus == JinBoLiftStatus.Idle) lift.direction else lift.liftStatus
     lift.reqs.removeIf { req ->
-      val direction = if (lift.liftStatus == JinBoLiftStatus.Idle) lift.direction else lift.liftStatus
       req.destFloor == lift.curFloor &&
-        lift.targetFloor == null &&
-        JinBoDirection.arrivalMatches(lift.config, req, direction) &&
+        (direction == JinBoLiftStatus.Idle || JinBoDirection.arrivalMatches(lift.config, req, direction)) &&
         req.doorCodes.ifEmpty { listOf(0) }.all { code ->
           lift.doors.firstOrNull { it.code == code }?.status == JinBoDoorStatus.OPEN
         }
+    }
+  }
+
+  private fun matchingDoorCodes(lift: JinBoRuntime, direction: JinBoLiftStatus): List<Int> {
+    return lift.reqs
+      .filter { it.destFloor == lift.curFloor && JinBoDirection.arrivalMatches(lift.config, it, direction) }
+      .flatMap { it.doorCodes.ifEmpty { listOf(0) } }
+      .ifEmpty { emptyList() }
+  }
+
+  private fun nextFloor(lift: JinBoRuntime): JinBoFloor? {
+    return when (lift.liftStatus) {
+      JinBoLiftStatus.Up -> lift.config.floors
+        .filter { !it.disabled && it.height > lift.h + JinBoConstants.FLOOR_EPSILON }
+        .minByOrNull { it.height }
+
+      JinBoLiftStatus.Down -> lift.config.floors
+        .filter { !it.disabled && it.height < lift.h - JinBoConstants.FLOOR_EPSILON }
+        .maxByOrNull { it.height }
+
+      JinBoLiftStatus.Idle -> null
     }
   }
 }

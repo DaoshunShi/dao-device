@@ -176,10 +176,14 @@ class JinBoServerTest {
       assertEquals(setOf(2), runtime.requestedFloors())
 
       JinBoServer.processLift(runtime)
+      assertEquals(1, runtime.curFloor)
+      assertTrue(runtime.isMoving())
+      JinBoServer.processLift(runtime)
       assertEquals(2, runtime.curFloor)
       assertEquals(listOf(OpenTracker.OPENING, OpenTracker.OPENING), runtime.doorStates())
       assertEquals(setOf(2), runtime.requestedFloors())
 
+      JinBoServer.processLift(runtime)
       JinBoServer.processLift(runtime)
       assertEquals(listOf(OpenTracker.OPEN, OpenTracker.OPEN), runtime.doorStates())
       assertTrue(runtime.reqs.isEmpty())
@@ -243,6 +247,7 @@ class JinBoServerTest {
       JinBoServer.processLift(runtime)
 
       assertTrue(runtime.doors.all { it.status != JinBoDoorStatus.OPEN })
+      JinBoServer.processLift(runtime)
       assertEquals(2, runtime.curFloor)
     }
   }
@@ -275,18 +280,15 @@ class JinBoServerTest {
       JinBoServer.processLift(runtime)
       runtime.lastMoveOn = System.currentTimeMillis() - 10_000
       JinBoServer.processLift(runtime)
-      assertEquals(3, runtime.targetFloor)
       assertTrue(runtime.isMoving())
       runtime.lastMoveOn = null
       JinBoServer.processLift(runtime)
       assertTrue(runtime.isMoving())
-      assertEquals(3, runtime.targetFloor)
       assertTrue(runtime.h > 0.0)
 
       JinBoCommandService.request(LIFT_ID, JinBoReq(2, JinBoReqSource.Tcp))
       JinBoServer.processLift(runtime)
 
-      assertEquals(2, runtime.targetFloor)
       assertTrue(runtime.isMoving())
       assertTrue(runtime.requestedFloors().contains(2))
     }
@@ -303,6 +305,7 @@ class JinBoServerTest {
         LIFT_ID,
         JinBoReq(2, JinBoReqSource.OutDoor, JinBoLiftStatus.Down, listOf(0)),
       )
+      JinBoServer.processLift(runtime)
       JinBoServer.processLift(runtime)
 
       assertEquals(3, runtime.curFloor)
@@ -322,12 +325,13 @@ class JinBoServerTest {
         JinBoReq(2, JinBoReqSource.OutDoor, JinBoLiftStatus.Down, listOf(0)),
       )
       JinBoServer.processLift(runtime)
+      JinBoServer.processLift(runtime)
 
       assertEquals(3, runtime.curFloor)
       assertEquals(setOf(2), runtime.requestedFloors())
 
       JinBoCommandService.close(LIFT_ID)
-      repeat(3) { JinBoServer.processLift(runtime) }
+      repeat(4) { JinBoServer.processLift(runtime) }
 
       assertEquals(2, runtime.curFloor)
       assertEquals(JinBoDoorStatus.OPEN, runtime.doors[0].status)
@@ -404,14 +408,14 @@ class JinBoServerTest {
 
     withLift(runtime) {
       JinBoCommandService.request(LIFT_ID, JinBoReq(2, JinBoReqSource.Tcp))
-      repeat(2) { JinBoServer.processLift(runtime) }
+      repeat(3) { JinBoServer.processLift(runtime) }
       assertEquals(JinBoDoorStatus.OPEN, runtime.doors[0].status)
 
       JinBoCommandService.request(
         LIFT_ID,
         JinBoReq(1, JinBoReqSource.OutDoor, JinBoLiftStatus.Up, listOf(0)),
       )
-      assertEquals(JinBoLiftStatus.Up, runtime.direction)
+      assertEquals(JinBoLiftStatus.Idle, runtime.direction)
       JinBoServer.processLift(runtime)
 
       assertEquals(JinBoDoorStatus.OPEN, runtime.doors[0].status)
@@ -458,17 +462,13 @@ class JinBoServerTest {
         JinBoReq(1, JinBoReqSource.OutDoor, JinBoLiftStatus.Up, listOf(0)),
       )
 
-      JinBoServer.processLift(runtime)
-      JinBoServer.processLift(runtime)
+      repeat(3) { JinBoServer.processLift(runtime) }
       assertEquals(3, runtime.curFloor)
       assertEquals(JinBoDoorStatus.OPEN, runtime.doors[0].status)
       assertEquals(setOf(1), runtime.requestedFloors())
 
       JinBoCommandService.close(LIFT_ID)
-      JinBoServer.processLift(runtime)
-      JinBoServer.processLift(runtime)
-      JinBoServer.processLift(runtime)
-      JinBoServer.processLift(runtime)
+      repeat(3) { JinBoServer.processLift(runtime) }
       assertEquals(1, runtime.curFloor)
       assertEquals(JinBoDoorStatus.OPEN, runtime.doors[0].status)
       assertTrue(runtime.reqs.isEmpty())
@@ -482,7 +482,7 @@ class JinBoServerTest {
     withLift(runtime) {
       runtime.doors.forEach { it.setStatus(JinBoDoorStatus.CLOSE, Date()) }
       JinBoCommandService.request(LIFT_ID, JinBoReq(3, JinBoReqSource.Tcp))
-      JinBoServer.processLift(runtime)
+      repeat(2) { JinBoServer.processLift(runtime) }
       assertTrue(runtime.h > 3.0 && runtime.h < 6.0)
 
       JinBoCommandService.request(
@@ -493,11 +493,10 @@ class JinBoServerTest {
         LIFT_ID,
         JinBoReq(1, JinBoReqSource.OutDoor, JinBoLiftStatus.Up, listOf(0)),
       )
-      assertEquals(3, runtime.targetFloor)
+      assertTrue(runtime.isMoving())
       runtime.lastMoveOn = System.currentTimeMillis() - 1_000
-      JinBoServer.processLift(runtime)
+      repeat(2) { JinBoServer.processLift(runtime) }
       assertEquals(3, runtime.curFloor)
-      JinBoServer.processLift(runtime)
       assertEquals(JinBoDoorStatus.OPEN, runtime.doors[0].status)
       assertEquals(setOf(1), runtime.requestedFloors())
 
@@ -522,7 +521,7 @@ class JinBoServerTest {
       JinBoCommandService.request(LIFT_ID, JinBoReq(3, JinBoReqSource.Tcp))
       JinBoCommandService.request(LIFT_ID, JinBoReq(1, JinBoReqSource.Tcp))
       runtime.direction = JinBoLiftStatus.Down
-      JinBoServer.processLift(runtime)
+      repeat(2) { JinBoServer.processLift(runtime) }
 
       assertEquals(1, runtime.curFloor)
       assertTrue(abs(runtime.h - runtime.config.floors.first { it.index == 1 }.height) < 1e-6)

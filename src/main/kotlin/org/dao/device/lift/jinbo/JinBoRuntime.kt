@@ -31,9 +31,6 @@ data class JinBoRuntime(
   var h: Double = 0.0 // 电梯当前位置，单位：米
 
   @Volatile
-  var targetFloor: Int? = null // 目标楼层
-
-  @Volatile
   var lastMoveOn: Long? = null // 上一次计算移动位移的时间，单位：ms
 
   @Volatile
@@ -83,7 +80,7 @@ data class JinBoRuntime(
 
   /** 是否无需处理当前 tick。 */
   fun isSimulationIdle(): Boolean =
-    reqs.isEmpty() && !isMoving() && targetFloor == null && allDoorsClosed() && !emc
+    reqs.isEmpty() && !isMoving() && allDoorsClosed() && !emc
 
   /** 是否所有门都已关闭。 */
   fun allDoorsClosed(): Boolean = doors.all { it.status == JinBoDoorStatus.CLOSE }
