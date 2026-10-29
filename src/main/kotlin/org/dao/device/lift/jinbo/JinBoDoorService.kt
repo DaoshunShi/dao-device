@@ -9,6 +9,7 @@ object JinBoDoorService {
    * 返回错误说明，成功时返回 null。
    */
   fun open(lift: JinBoRuntime, doorCodes: List<Int>, openedAt: Date = Date()): String? {
+    if (lift.floorForOpening() == null) return "电梯未到达楼层高度，不能开门"
     val targets = doorCodes.distinct().ifEmpty { listOf(0) }.map { code ->
       lift.doors.firstOrNull { it.code == code } ?: return "门号 $code 不存在"
     }

@@ -6,10 +6,7 @@ import kotlin.math.abs
 object JinBoMoveService {
   /** 用实际高度校正当前楼层，防止到站后仍以移动前楼层处理请求。 */
   fun syncCurrentFloor(lift: JinBoRuntime) {
-    val floor = lift.config.floors
-      .filter { !it.disabled }
-      .minByOrNull { abs(it.height - lift.h) }
-    if (floor != null && abs(floor.height - lift.h) < JinBoConstants.FLOOR_EPSILON) lift.curFloor = floor.index
+    lift.floorForOpening()?.let { lift.curFloor = it }
   }
 
   /** 按当前速度沿方向推进；会逐层通过楼层，稍后由 [arrive] 判断是否停车。 */
@@ -83,7 +80,7 @@ object JinBoMoveService {
   fun cleanOpenedFloorReq(lift: JinBoRuntime) {
     val direction = if (lift.liftStatus == JinBoLiftStatus.Idle) lift.direction else lift.liftStatus
     lift.reqs.removeIf { req ->
-      req.destFloor == lift.curFloor &&
+      req.destFloor == lift.floorForOpening() &&
         (direction == JinBoLiftStatus.Idle || JinBoDirectionHelper.arrivalMatches(lift.config, req, direction)) &&
         req.doorCodes.ifEmpty { listOf(0) }.all { code ->
           lift.doors.firstOrNull { it.code == code }?.status == JinBoDoorStatus.OPEN
@@ -93,7 +90,7 @@ object JinBoMoveService {
 
   private fun matchingDoorCodes(lift: JinBoRuntime, direction: JinBoLiftStatus): List<Int> {
     return lift.reqs
-      .filter { it.destFloor == lift.curFloor && JinBoDirectionHelper.arrivalMatches(lift.config, it, direction) }
+      .filter { it.destFloor == lift.floorForOpening() && JinBoDirectionHelper.arrivalMatches(lift.config, it, direction) }
       .flatMap { it.doorCodes.ifEmpty { listOf(0) } }
       .ifEmpty { emptyList() }
   }

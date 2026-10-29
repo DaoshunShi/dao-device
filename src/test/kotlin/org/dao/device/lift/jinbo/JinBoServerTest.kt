@@ -11,6 +11,7 @@ import kotlin.math.abs
 import kotlin.test.assertEquals
 import kotlin.test.assertFalse
 import kotlin.test.assertNotNull
+import kotlin.test.assertNull
 import kotlin.test.assertTrue
 
 class JinBoServerTest {
@@ -31,6 +32,93 @@ class JinBoServerTest {
     assertEquals(JinBoLiftStatus.Down, JinBoLiftStatus.Up.opposite())
     assertEquals(JinBoLiftStatus.Up, JinBoLiftStatus.Down.opposite())
     assertEquals(JinBoLiftStatus.Idle, JinBoLiftStatus.Idle.opposite())
+  }
+
+  @Test
+  fun `opening floor includes the height tolerance boundary on either side`() {
+    val runtime = newRuntime()
+    val epsilon = JinBoConstants.FLOOR_EPSILON
+
+    for (height in listOf(0.0, -epsilon / 2, epsilon / 2, -epsilon, epsilon)) {
+      runtime.h = height
+      assertEquals(1, runtime.floorForOpening(), "height=$height")
+    }
+    for (height in listOf(-2 * epsilon, 2 * epsilon, 1.5)) {
+      runtime.h = height
+      assertNull(runtime.floorForOpening(), "height=$height")
+    }
+  }
+
+  @Test
+  fun `opening floor uses actual height and skips disabled floors`() {
+    val config = newRuntime().config.copy(
+      floors = listOf(
+        JinBoFloor(0, "地下室", -3.0),
+        JinBoFloor(1, "1F", 0.0),
+        JinBoFloor(2, "2F", 3.0, disabled = true),
+      ),
+    )
+    val runtime = JinBoRuntime(config)
+    runtime.curFloor = 2
+    runtime.h = -3.0
+    assertEquals(0, runtime.floorForOpening())
+    assertEquals(2, runtime.curFloor)
+
+    runtime.h = 0.0
+    assertEquals(1, runtime.floorForOpening())
+    runtime.h = 3.0
+    assertNull(runtime.floorForOpening())
+  }
+
+  @Test
+  fun `a request for the last passed floor does not open doors between floors`() {
+    val runtime = newRuntime(liftSpeed = 2.0)
+    runtime.h = 0.5
+    runtime.direction = JinBoLiftStatus.Up
+    runtime.liftStatus = JinBoLiftStatus.Up
+
+    withLift(runtime) {
+      JinBoCommandService.request(LIFT_ID, JinBoReq(1))
+      JinBoCommandService.request(LIFT_ID, JinBoReq(3))
+
+      JinBoServer.processLift(runtime)
+
+      assertEquals(0.7, runtime.h, 1e-9)
+      assertEquals(JinBoLiftStatus.Up, runtime.liftStatus)
+      assertEquals(JinBoDoorStatus.CLOSE, runtime.doors.single().status)
+      assertEquals(setOf(1, 3), runtime.requestedFloors())
+    }
+  }
+
+  @Test
+  fun `door service only starts opening at a floor within the height tolerance`() {
+    val runtime = newRuntime()
+    runtime.h = 0.5
+
+    assertNotNull(JinBoDoorService.open(runtime, listOf(0)))
+    assertEquals(JinBoDoorStatus.CLOSE, runtime.doors.single().status)
+
+    runtime.h = JinBoConstants.FLOOR_EPSILON
+    assertNull(JinBoDoorService.open(runtime, listOf(0)))
+    assertEquals(JinBoDoorStatus.OPENING, runtime.doors.single().status)
+  }
+
+  @Test
+  fun `explicit opening and request clearing require floor height alignment`() {
+    val runtime = newRuntime()
+    runtime.h = 0.5
+    val request = JinBoReq(1, doorCodes = listOf(0))
+
+    withLift(runtime) {
+      assertEquals("400", JinBoCommandService.open(LIFT_ID, listOf(0)).code)
+      assertEquals(JinBoDoorStatus.CLOSE, runtime.doors.single().status)
+
+      runtime.reqs.add(request)
+      runtime.doors.single().markOpen(Date())
+      JinBoMoveService.cleanOpenedFloorReq(runtime)
+
+      assertEquals(listOf(request), runtime.reqs)
+    }
   }
 
   @Test

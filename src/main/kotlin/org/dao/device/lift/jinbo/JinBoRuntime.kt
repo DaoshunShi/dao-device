@@ -4,6 +4,7 @@ import com.fasterxml.jackson.annotation.JsonIgnore
 import org.dao.device.lift.jinbo.fe.LiftFrame
 import java.util.Date
 import java.util.concurrent.CopyOnWriteArrayList
+import kotlin.math.abs
 
 /** 一部电梯的可变运行状态。 */
 data class JinBoRuntime(
@@ -74,6 +75,11 @@ data class JinBoRuntime(
 
   /** 电梯是否正在驶向其他楼层；移动中的门操作应被拒绝。 */
   fun isMoving(): Boolean = liftStatus != JinBoLiftStatus.Idle
+
+  /** 当前高度允许开门的启用楼层编号；高度差超过容差时返回 null。 */
+  fun floorForOpening(): Int? = config.floors.firstOrNull {
+    !it.disabled && abs(h - it.height) <= JinBoConstants.FLOOR_EPSILON
+  }?.index
 
   /** 是否存在已经打开的门。 */
   fun hasOpenDoor(): Boolean = doors.any { it.status == JinBoDoorStatus.OPEN }

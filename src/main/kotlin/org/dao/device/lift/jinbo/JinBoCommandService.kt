@@ -4,7 +4,6 @@ import org.dao.device.common.JsonHelper
 import org.dao.device.lift.jinbo.event.LiftEvent
 import org.dao.device.lift.jinbo.fe.JinBoEventBus
 import java.util.Date
-import kotlin.math.abs
 
 /** 电梯统一命令入口：HTTP、TCP、页面按钮都通过这里调用业务命令。 */
 object JinBoCommandService {
@@ -35,8 +34,7 @@ object JinBoCommandService {
             if (lift.reqs.none { it == resolvedReq }) {
               lift.reqs.add(resolvedReq)
             }
-            if (req.destFloor == lift.curFloor &&
-              isAtFloorHeight(lift, req.destFloor) &&
+            if (req.destFloor == lift.floorForOpening() &&
               JinBoDirectionHelper.arrivalMatches(lift.config, resolvedReq, lift.direction)
             ) {
               JinBoDoorService.refreshSameFloorTimer(lift, resolvedReq.doorCodes)
@@ -188,10 +186,4 @@ object JinBoCommandService {
     val lift = JinBoServer.lifts[liftId] ?: return
     JinBoStateService.publish(liftId, JinBoSnapshot.capture(lift))
   }
-
-  private fun isAtFloorHeight(lift: JinBoRuntime, floorIndex: Int): Boolean {
-    val floor = lift.config.floors.firstOrNull { it.index == floorIndex } ?: return false
-    return abs(floor.height - lift.h) < JinBoConstants.FLOOR_EPSILON
-  }
-
 }

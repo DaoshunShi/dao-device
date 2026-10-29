@@ -49,7 +49,7 @@ object JinBoRequestSelector {
   }
 
   private fun canServeAtCurrentFloor(lr: JinBoRuntime, req: JinBoReq, direction: JinBoLiftStatus): Boolean =
-    req.destFloor == lr.curFloor &&
+    req.destFloor == lr.floorForOpening() &&
       (direction == JinBoLiftStatus.Idle || JinBoDirectionHelper.arrivalMatches(lr.config, req, direction))
 
   private fun currentDirection(lr: JinBoRuntime): JinBoLiftStatus =
