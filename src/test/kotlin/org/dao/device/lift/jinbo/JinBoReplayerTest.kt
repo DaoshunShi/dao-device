@@ -316,6 +316,40 @@ class JinBoReplayerTest {
   }
 
   @Test
+  fun `replay notifies both control and log panel listeners`() {
+    withReplayFile(FILE_NAME, listOf(1_000L), fileNamePattern = "replay-replayer-test.log") {
+      val controlStates = mutableListOf<Boolean>()
+      val logStates = mutableListOf<Boolean>()
+      lateinit var panel: LiftReplayPanel
+      try {
+        SwingUtilities.invokeAndWait {
+          panel = LiftReplayPanel(
+            config = JinBoConfig(
+              id = LIFT_ID,
+              port = 0,
+              floors = listOf(JinBoFloor(1, "1F", 0.0)),
+              liftSpeed = 2.0,
+              openCost = 100,
+              closeCost = 100,
+              closeDelay = 100,
+            ),
+            parentWindow = { error("有效回放不应打开提示窗口") },
+          )
+          panel.onReplayStateChanged { controlStates.add(it) }
+          panel.onReplayStateChanged { logStates.add(it) }
+          panel.setReplayEnabled(true)
+          panel.setReplayEnabled(false)
+        }
+
+        assertEquals(listOf(true, false), controlStates)
+        assertEquals(listOf(true, false), logStates)
+      } finally {
+        SwingUtilities.invokeAndWait { panel.setReplayEnabled(false) }
+      }
+    }
+  }
+
+  @Test
   fun `enabling replay loads a frame timeline and switches to replay data source`() {
     val replayFrame = JinBoFrame(
       liftId = LIFT_ID,

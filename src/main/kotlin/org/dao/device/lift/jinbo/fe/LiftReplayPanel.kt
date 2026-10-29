@@ -40,7 +40,7 @@ class LiftReplayPanel(
   private val replayFileCombo = JComboBox<String>()
   private val playbackRateCombo = JComboBox<Double>(PLAYBACK_RATES)
   private var suppressComboEvent = false
-  private var onReplayStateChanged: ((Boolean) -> Unit)? = null
+  private val replayStateListeners = mutableListOf<(Boolean) -> Unit>()
   private var onFrameRendered: ((List<JinBoFrame>, JinBoReplayPosition) -> Unit)? = null
   private var replayMode = false
   private var activeFile: String? = null
@@ -84,7 +84,7 @@ class LiftReplayPanel(
       if (!loadReplayFile(defaultFile)) {
         replayer.onFrameChanged = null
         replayer.close()
-        onReplayStateChanged?.invoke(false)
+        replayStateListeners.forEach { it(false) }
         return
       }
       activeFile = defaultFile
@@ -94,7 +94,7 @@ class LiftReplayPanel(
       revalidate()
       doLayout()
       repaint()
-      onReplayStateChanged?.invoke(true)
+      replayStateListeners.forEach { it(true) }
     } else {
       deactivate()
       revalidate()
@@ -109,7 +109,7 @@ class LiftReplayPanel(
     JinBoEventBus.setReplayMode(config.id, false)
     isVisible = false
     showEmptyReplay("无回放数据")
-    onReplayStateChanged?.invoke(false)
+    replayStateListeners.forEach { it(false) }
   }
 
   private fun showEmptyReplay(message: String) {
@@ -124,7 +124,7 @@ class LiftReplayPanel(
 
   /** 通知开关和窗口回放模式状态，避免控件与实际数据源不一致。 */
   fun onReplayStateChanged(callback: (Boolean) -> Unit) {
-    onReplayStateChanged = callback
+    replayStateListeners.add(callback)
   }
 
   fun onFrameRendered(callback: (frames: List<JinBoFrame>, position: JinBoReplayPosition) -> Unit) {
