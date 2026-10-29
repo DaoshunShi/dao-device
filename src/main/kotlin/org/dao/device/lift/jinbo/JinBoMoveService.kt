@@ -8,19 +8,16 @@ object JinBoMoveService {
     if (!lift.isMoving() || !lift.allDoorsClosed()) return
 
     val now = System.currentTimeMillis()
-    val elapsedSeconds = lift.lastMoveOn?.let { (now - it) / 1000.0 }
-      ?: JinBoConstants.DEFAULT_MOVE_SECONDS
-    val d = lift.config.liftSpeed * elapsedSeconds.coerceIn(0.0, JinBoConstants.MAX_STEP_SECONDS)
+    val t = lift.lastMoveOn?.let { (now - it) / 1000.0 } ?: JinBoConstants.DEFAULT_MOVE_SECONDS
+    val d = lift.config.liftSpeed * t
     if (d <= 0) return
-    val floors = lift.config.floors.filter { !it.disabled }
-    if (floors.isEmpty()) return
 
     val nextHeight = lift.h + d * lift.liftStatus.heightMultiplier
     val endHeight = when (lift.liftStatus) {
       JinBoLiftStatus.Up -> minOf(nextHeight, stopHeight ?: nextHeight)
       JinBoLiftStatus.Down -> maxOf(nextHeight, stopHeight ?: nextHeight)
       JinBoLiftStatus.Idle -> error("Idle 状态不应进入移动步骤")
-    }.coerceIn(floors.first().height, floors.last().height)
+    }
     lift.h = endHeight
     lift.lastMoveOn = now
   }

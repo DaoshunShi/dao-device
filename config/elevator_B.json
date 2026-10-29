@@ -15,7 +15,7 @@
   "liftSpeed": 2.0,
   "openCost": 800,
   "closeCost": 800,
-  "closeDelay": 5000,
+  "closeDelay": 2000,
   "logTcp": true,
   "connLimit": 2
 }
