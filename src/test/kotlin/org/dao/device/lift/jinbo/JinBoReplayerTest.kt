@@ -272,6 +272,51 @@ class JinBoReplayerTest {
   }
 
   @Test
+  fun `replaying an outside down call preserves its source and floor`() {
+    val requests = listOf(JinBoRequestEntry(JinBoReq(7, JinBoReqSource.OutDoor, JinBoLiftStatus.Down, listOf(0))))
+    val frame = JinBoFrame(
+      liftId = LIFT_ID,
+      ts = 1_000L,
+      curFloor = 2,
+      h = 3.0,
+      liftStatus = JinBoLiftStatus.Idle,
+      emergencyStopped = false,
+      buttons = requests,
+      reqs = requests,
+      logs = emptyList(),
+    )
+    withReplayFile(FILE_NAME, fileNamePattern = "replay-replayer-test.log", frames = listOf(frame)) {
+      val events = mutableListOf<LiftEvent>()
+      val listener = object : org.dao.device.common.GuiEventListener {
+        override fun onEvent(event: LiftEvent) {
+          events.add(event)
+        }
+      }
+      JinBoEventBus.register(LIFT_ID, listener)
+      val replay = JinBoReplayer(LIFT_ID)
+      try {
+        replay.openFile("replay-replayer-test.log")
+        replay.seekFirstFrame()
+
+        val outside: List<JinBoReq> = JsonHelper.mapper.readValue(
+          events.single { it.topic == "outside" }.msg,
+          com.fasterxml.jackson.module.kotlin.jacksonTypeRef(),
+        )
+        val queued: List<JinBoRequestEntry> = JsonHelper.mapper.readValue(
+          events.single { it.topic == "reqs" }.msg,
+          com.fasterxml.jackson.module.kotlin.jacksonTypeRef(),
+        )
+        assertEquals(requests.map { it.req }, outside)
+        assertEquals("[]", events.single { it.topic == "inside" }.msg)
+        assertEquals(requests, queued)
+      } finally {
+        replay.close()
+        JinBoEventBus.removeListener(LIFT_ID, listener)
+      }
+    }
+  }
+
+  @Test
   fun `failed replay switch keeps the active replay and replay mode`() {
     withReplayFile(FILE_NAME, listOf(1_000L), fileNamePattern = "replay-replayer-test.log") {
       val emptyFile = File("logs", "replay-empty-test.log").apply { writeText("") }
@@ -345,6 +390,88 @@ class JinBoReplayerTest {
         assertEquals(listOf(true, false), logStates)
       } finally {
         SwingUtilities.invokeAndWait { panel.setReplayEnabled(false) }
+      }
+    }
+  }
+
+  @Test
+  fun `leaving replay immediately restores live state buttons and requests without a simulation tick`() {
+    val historicalRequests = listOf(JinBoRequestEntry(JinBoReq(2, JinBoReqSource.InDoor, doorCodes = listOf(0))))
+    val frame = JinBoFrame(
+      liftId = LIFT_ID,
+      ts = 1_000L,
+      curFloor = 2,
+      h = 3.0,
+      liftStatus = JinBoLiftStatus.Down,
+      direction = JinBoLiftStatus.Down,
+      emergencyStopped = false,
+      buttons = historicalRequests,
+      reqs = historicalRequests,
+      logs = emptyList(),
+    )
+    withReplayFile(FILE_NAME, fileNamePattern = "replay-replayer-test.log", frames = listOf(frame)) {
+      for (liveRequests in listOf(
+        emptyList(),
+        listOf(
+          JinBoReq(6, JinBoReqSource.OutDoor, JinBoLiftStatus.Down, listOf(0)),
+          JinBoReq(1, JinBoReqSource.Tcp, doorCodes = listOf(0)),
+        ),
+      )) {
+        val runtime = JinBoRuntime(
+          JinBoConfig(
+            id = LIFT_ID,
+            port = 0,
+            floors = listOf(JinBoFloor(1, "1F", 0.0), JinBoFloor(2, "2F", 3.0), JinBoFloor(6, "6F", 15.0)),
+            liftSpeed = 2.0,
+            openCost = 100,
+            closeCost = 100,
+            closeDelay = 100,
+          ),
+        ).apply { setInitialFloor() }
+        val events = mutableListOf<LiftEvent>()
+        val listener = object : org.dao.device.common.GuiEventListener {
+          override fun onEvent(event: LiftEvent) {
+            events.add(event)
+          }
+        }
+        val previousRuntime = JinBoServer.lifts.put(LIFT_ID, runtime)
+        JinBoEventBus.register(LIFT_ID, listener)
+        val replay = JinBoReplayer(LIFT_ID)
+        try {
+          replay.openFile("replay-replayer-test.log")
+          replay.seekFirstFrame()
+          assertTrue(events.single { it.topic == "inside" }.msg.contains("\"destFloor\":2"))
+          events.clear()
+
+          liveRequests.forEach { assertEquals("0", JinBoCommandService.request(LIFT_ID, it).code) }
+          assertTrue(events.isEmpty())
+          if (liveRequests.isEmpty()) assertTrue(runtime.isSimulationIdle())
+
+          SwingUtilities.invokeAndWait { replay.close() }
+
+          assertEquals(listOf("liftState", "outside", "inside", "tcp", "reqs"), events.map { it.topic })
+          assertEquals("[]", events.single { it.topic == "inside" }.msg)
+          for ((topic, source) in listOf("outside" to JinBoReqSource.OutDoor, "tcp" to JinBoReqSource.Tcp)) {
+            val requests: List<JinBoReq> = JsonHelper.mapper.readValue(
+              events.single { it.topic == topic }.msg,
+              com.fasterxml.jackson.module.kotlin.jacksonTypeRef(),
+            )
+            assertEquals(liveRequests.filter { it.source == source }, requests)
+          }
+          val queued: List<JinBoRequestEntry> = JsonHelper.mapper.readValue(
+            events.single { it.topic == "reqs" }.msg,
+            com.fasterxml.jackson.module.kotlin.jacksonTypeRef(),
+          )
+          assertEquals(liveRequests, queued.map { it.req })
+          val state = JsonHelper.mapper.readTree(events.single { it.topic == "liftState" }.msg)
+          assertEquals(runtime.h, state["h"].asDouble())
+          assertEquals("Idle", state["liftStatus"].asText())
+          assertEquals("Idle", state["direction"].asText())
+        } finally {
+          JinBoEventBus.removeListener(LIFT_ID, listener)
+          replay.close()
+          if (previousRuntime == null) JinBoServer.lifts.remove(LIFT_ID) else JinBoServer.lifts[LIFT_ID] = previousRuntime
+        }
       }
     }
   }

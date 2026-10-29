@@ -175,6 +175,11 @@ class JinBoReplayer(private val liftId: String) {
     generation++
     JinBoEventBus.setReplayMode(liftId, false)
     dispose()
+
+    // 空闲电梯不会再产生 tick，退出回放时主动覆盖界面上残留的历史状态。
+    val lift = JinBoServer.lifts[liftId] ?: return
+    val snapshot = JinBoServer.withLiftLock(lift, "JinBoReplayer.close") { JinBoSnapshot.capture(lift) }
+    JinBoStateService.publish(liftId, snapshot)
   }
 
   fun playOrPause(): Boolean {
