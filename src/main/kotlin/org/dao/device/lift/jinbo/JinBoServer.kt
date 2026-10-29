@@ -6,6 +6,7 @@ import java.util.concurrent.ConcurrentHashMap
 import java.util.concurrent.ExecutorService
 import java.util.concurrent.Executors
 import java.util.concurrent.Future
+import kotlin.math.abs
 
 /**
  * 仿真金博电梯。
@@ -56,12 +57,12 @@ object JinBoServer {
   /** 推进一次电梯仿真 tick。 */
   fun processLift(lr: JinBoRuntime) {
     val snapshot = withLiftLock(lr, "JinBoServer.processLift") {
-      JinBoMoveService.syncCurrentFloor(lr)
+      lr.floorForOpening()?.let { lr.curFloor = it }
       if (lr.emc) return@withLiftLock JinBoSnapshot.capture(lr)
 
       val now = Date()
       lr.doors.forEach { it.advance(now, lr.config) }
-      if (!lr.isMoving()) JinBoMoveService.cleanOpenedFloorReq(lr)
+      if (!lr.isMoving()) JinBoRequestSelector.cleanOpenedFloorReq(lr)
 
       if (!lr.isMoving()) {
         if (lr.hasOpenDoor()) {
@@ -80,8 +81,51 @@ object JinBoServer {
       } else {
         lr.doors.forEach { it.startClosing(now) }
         if (lr.allDoorsClosed()) {
-          JinBoMoveService.advance(lr)
-          JinBoMoveService.arrive(lr)
+          // 当前高度已有可服务请求时，先按到达方向停靠，避免换向或继续移动后漏掉它。
+          val nextDirection = if (JinBoRequestSelector.doorCodesForCurrentFloor(lr).isNotEmpty()) {
+            lr.liftStatus
+          } else {
+            JinBoRequestSelector.selectNextDirection(lr)
+          }
+          lr.liftStatus = nextDirection
+          lr.direction = nextDirection
+          if (nextDirection == JinBoLiftStatus.Idle) lr.lastMoveOn = null
+
+          val stopHeight = when (lr.direction) {
+            JinBoLiftStatus.Up -> lr.config.floors.asSequence()
+              .filter { it.height >= lr.h - JinBoConstants.FLOOR_EPSILON }
+            JinBoLiftStatus.Down -> lr.config.floors.asReversed().asSequence()
+              .filter { it.height <= lr.h + JinBoConstants.FLOOR_EPSILON }
+            JinBoLiftStatus.Idle -> emptySequence()
+          }.firstOrNull { floor ->
+            !floor.disabled &&
+              lr.reqs.any { req ->
+                req.destFloor == floor.index && JinBoDirectionHelper.arrivalMatches(lr.config, req, lr.direction)
+              }
+          }?.height
+          JinBoMoveService.advance(lr, stopHeight)
+
+          // 按本帧结束高度一次性同步最后经过的楼层，容差内视为恰好到层。
+          val floor = when (lr.liftStatus) {
+            JinBoLiftStatus.Up -> lr.config.floors.lastOrNull {
+              !it.disabled && it.height <= lr.h + JinBoConstants.FLOOR_EPSILON
+            }
+            JinBoLiftStatus.Down -> lr.config.floors.firstOrNull {
+              !it.disabled && it.height >= lr.h - JinBoConstants.FLOOR_EPSILON
+            }
+            JinBoLiftStatus.Idle -> null
+          }
+          if (floor != null) {
+            lr.curFloor = floor.index
+            if (abs(lr.h - floor.height) <= JinBoConstants.FLOOR_EPSILON) lr.h = floor.height
+          }
+
+          val arrivalDoorCodes = JinBoRequestSelector.doorCodesForCurrentFloor(lr)
+          if (arrivalDoorCodes.isNotEmpty()) {
+            lr.liftStatus = JinBoLiftStatus.Idle
+            lr.lastMoveOn = null
+            JinBoDoorService.open(lr, arrivalDoorCodes)
+          }
         }
       }
 

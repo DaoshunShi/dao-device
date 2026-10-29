@@ -48,6 +48,17 @@ object JinBoRequestSelector {
       .ifEmpty { emptyList() }
   }
 
+  /** 门已经打开后，清理当前楼层可服务的呼梯请求。 */
+  fun cleanOpenedFloorReq(lr: JinBoRuntime) {
+    val direction = currentDirection(lr)
+    lr.reqs.removeIf { req ->
+      canServeAtCurrentFloor(lr, req, direction) &&
+        req.doorCodes.ifEmpty { listOf(0) }.all { code ->
+          lr.doors.firstOrNull { it.code == code }?.status == JinBoDoorStatus.OPEN
+        }
+    }
+  }
+
   private fun canServeAtCurrentFloor(lr: JinBoRuntime, req: JinBoReq, direction: JinBoLiftStatus): Boolean =
     req.destFloor == lr.floorForOpening() &&
       (direction == JinBoLiftStatus.Idle || JinBoDirectionHelper.arrivalMatches(lr.config, req, direction))

@@ -115,9 +115,125 @@ class JinBoServerTest {
 
       runtime.reqs.add(request)
       runtime.doors.single().markOpen(Date())
-      JinBoMoveService.cleanOpenedFloorReq(runtime)
+      JinBoRequestSelector.cleanOpenedFloorReq(runtime)
 
       assertEquals(listOf(request), runtime.reqs)
+    }
+  }
+
+  @Test
+  fun `movement advances partially without changing the current floor`() {
+    for (direction in listOf(JinBoLiftStatus.Up, JinBoLiftStatus.Down)) {
+      val initialFloor = if (direction == JinBoLiftStatus.Up) 1 else 3
+      val runtime = newRuntime(initialFloor = initialFloor, liftSpeed = 2.0)
+      val initialHeight = runtime.h
+      runtime.liftStatus = direction
+
+      JinBoMoveService.advance(runtime, stopHeight = 3.0)
+
+      val expectedHeight = if (direction == JinBoLiftStatus.Up) initialHeight + 0.2 else initialHeight - 0.2
+      assertEquals(expectedHeight, runtime.h, 1e-9)
+      assertEquals(initialFloor, runtime.curFloor)
+      assertNotNull(runtime.lastMoveOn)
+    }
+  }
+
+  @Test
+  fun `movement stops at the requested height or uses the full frame distance`() {
+    for (direction in listOf(JinBoLiftStatus.Up, JinBoLiftStatus.Down)) {
+      for (stopAtMiddleFloor in listOf(false, true)) {
+        val initialFloor = if (direction == JinBoLiftStatus.Up) 1 else 3
+        val runtime = newRuntime(initialFloor = initialFloor, liftSpeed = 45.0)
+        runtime.liftStatus = direction
+        JinBoMoveService.advance(runtime, stopHeight = if (stopAtMiddleFloor) 3.0 else null)
+
+        val expectedHeight = when {
+          stopAtMiddleFloor -> 3.0
+          direction == JinBoLiftStatus.Up -> 4.5
+          else -> 1.5
+        }
+        assertEquals(expectedHeight, runtime.h, 1e-9)
+        assertEquals(initialFloor, runtime.curFloor)
+      }
+    }
+  }
+
+  @Test
+  fun `movement stops at the current floor without moving away`() {
+    for (direction in listOf(JinBoLiftStatus.Up, JinBoLiftStatus.Down)) {
+      val runtime = newRuntime(initialFloor = 2)
+      runtime.liftStatus = direction
+
+      JinBoMoveService.advance(runtime, stopHeight = 3.0)
+
+      assertEquals(3.0, runtime.h)
+      assertEquals(2, runtime.curFloor)
+      assertEquals(direction, runtime.liftStatus)
+      assertEquals(JinBoDoorStatus.CLOSE, runtime.doors.single().status)
+    }
+  }
+
+  @Test
+  fun `movement requires a moving status and every door to be closed`() {
+    for (doorStatus in JinBoDoorStatus.entries) {
+      val runtime = newRuntime(liftSpeed = 2.0)
+      runtime.doors.single().setStatus(doorStatus, Date())
+
+      JinBoMoveService.advance(runtime, stopHeight = 3.0)
+      assertEquals(0.0, runtime.h)
+      assertNull(runtime.lastMoveOn)
+
+      runtime.liftStatus = JinBoLiftStatus.Up
+      JinBoMoveService.advance(runtime, stopHeight = 3.0)
+
+      assertEquals(if (doorStatus == JinBoDoorStatus.CLOSE) 0.2 else 0.0, runtime.h, 1e-9)
+      if (doorStatus != JinBoDoorStatus.CLOSE) assertNull(runtime.lastMoveOn)
+    }
+  }
+
+  @Test
+  fun `movement keeps the current floor unchanged and never passes the building boundary`() {
+    for (direction in listOf(JinBoLiftStatus.Up, JinBoLiftStatus.Down)) {
+      for (distance in listOf(3.0 - JinBoConstants.FLOOR_EPSILON / 2, 3.0, 100.0)) {
+        val initialFloor = if (direction == JinBoLiftStatus.Up) 1 else 3
+        val runtime = newRuntime(initialFloor = initialFloor, liftSpeed = distance / JinBoConstants.DEFAULT_MOVE_SECONDS)
+        runtime.liftStatus = direction
+
+        JinBoMoveService.advance(runtime, stopHeight = null)
+
+        val expectedHeight = if (direction == JinBoLiftStatus.Up) minOf(distance, 6.0) else maxOf(6.0 - distance, 0.0)
+        assertEquals(expectedHeight, runtime.h, 1e-9)
+        assertEquals(initialFloor, runtime.curFloor)
+      }
+    }
+  }
+
+  @Test
+  fun `process lift synchronizes passed floors and snaps height within tolerance`() {
+    for (direction in listOf(JinBoLiftStatus.Up, JinBoLiftStatus.Down)) {
+      for (distance in listOf(3.0 - JinBoConstants.FLOOR_EPSILON / 2, 3.0, 4.5, 100.0)) {
+        val initialFloor = if (direction == JinBoLiftStatus.Up) 1 else 3
+        val fartherFloor = if (direction == JinBoLiftStatus.Up) 3 else 1
+        val runtime = newRuntime(initialFloor = initialFloor, liftSpeed = distance / JinBoConstants.DEFAULT_MOVE_SECONDS)
+        runtime.liftStatus = direction
+        runtime.direction = direction
+        runtime.reqs.add(JinBoReq(fartherFloor))
+
+        JinBoServer.processLift(runtime)
+
+        val expectedFloor = when {
+          distance < 6.0 -> 2
+          direction == JinBoLiftStatus.Up -> 3
+          else -> 1
+        }
+        val expectedHeight = when {
+          distance <= 3.0 -> 3.0
+          direction == JinBoLiftStatus.Up -> minOf(distance, 6.0)
+          else -> maxOf(6.0 - distance, 0.0)
+        }
+        assertEquals(expectedHeight, runtime.h, 1e-9)
+        assertEquals(expectedFloor, runtime.curFloor)
+      }
     }
   }
 
@@ -380,6 +496,97 @@ class JinBoServerTest {
       assertTrue(runtime.isMoving())
       assertTrue(runtime.requestedFloors().contains(2))
     }
+  }
+
+  @Test
+  fun `process lift opens at the selected stop for exact arrival and overshoot in either direction`() {
+    for (direction in listOf(JinBoLiftStatus.Up, JinBoLiftStatus.Down)) {
+      for (distance in listOf(3.0, 4.5, 10.0)) {
+        val initialFloor = if (direction == JinBoLiftStatus.Up) 1 else 3
+        val fartherFloor = if (direction == JinBoLiftStatus.Up) 3 else 1
+        val runtime = newRuntime(initialFloor = initialFloor, liftSpeed = distance / JinBoConstants.DEFAULT_MOVE_SECONDS)
+        runtime.liftStatus = direction
+        runtime.direction = direction
+        runtime.reqs.add(JinBoReq(fartherFloor))
+        runtime.reqs.add(JinBoReq(2, JinBoReqSource.OutDoor, direction))
+
+        JinBoServer.processLift(runtime)
+
+        assertEquals(3.0, runtime.h)
+        assertEquals(2, runtime.curFloor)
+        assertEquals(JinBoLiftStatus.Idle, runtime.liftStatus)
+        assertEquals(direction, runtime.direction)
+        assertNull(runtime.lastMoveOn)
+        assertEquals(JinBoDoorStatus.OPENING, runtime.doors.single().status)
+        assertEquals(setOf(2, fartherFloor), runtime.requestedFloors())
+      }
+    }
+  }
+
+  @Test
+  fun `process lift recalculates its stop when a nearer request arrives during travel`() {
+    val runtime = newRuntime(liftSpeed = 2.0)
+    runtime.liftStatus = JinBoLiftStatus.Up
+    runtime.direction = JinBoLiftStatus.Up
+    runtime.reqs.add(JinBoReq(3))
+    JinBoServer.processLift(runtime)
+    assertEquals(0.2, runtime.h, 1e-9)
+
+    runtime.reqs.add(JinBoReq(2))
+    runtime.config.liftSpeed = 100.0
+    runtime.lastMoveOn = null
+    JinBoServer.processLift(runtime)
+
+    assertEquals(3.0, runtime.h)
+    assertEquals(2, runtime.curFloor)
+    assertEquals(JinBoDoorStatus.OPENING, runtime.doors.single().status)
+    assertEquals(setOf(2, 3), runtime.requestedFloors())
+  }
+
+  @Test
+  fun `process lift serves an aligned current floor call before moving farther`() {
+    for (direction in listOf(JinBoLiftStatus.Up, JinBoLiftStatus.Down)) {
+      val runtime = newRuntime(initialFloor = 2)
+      val fartherFloor = if (direction == JinBoLiftStatus.Up) 3 else 1
+      runtime.liftStatus = direction
+      runtime.direction = direction
+      runtime.reqs.add(JinBoReq(fartherFloor))
+      runtime.reqs.add(JinBoReq(2, JinBoReqSource.OutDoor, direction))
+
+      JinBoServer.processLift(runtime)
+
+      assertEquals(3.0, runtime.h)
+      assertEquals(JinBoLiftStatus.Idle, runtime.liftStatus)
+      assertEquals(direction, runtime.direction)
+      assertEquals(JinBoDoorStatus.OPENING, runtime.doors.single().status)
+      assertEquals(setOf(2, fartherFloor), runtime.requestedFloors())
+    }
+  }
+
+  @Test
+  fun `process lift leaves opposite direction calls pending at a shared stop`() {
+    val runtime = newRuntime().let { base ->
+      JinBoRuntime(base.config.copy(floors = base.config.floors + JinBoFloor(4, "4F", 9.0))).apply {
+        setInitialFloor()
+      }
+    }
+    runtime.liftStatus = JinBoLiftStatus.Up
+    runtime.direction = JinBoLiftStatus.Up
+    runtime.reqs.add(JinBoReq(4))
+    val upCall = JinBoReq(2, JinBoReqSource.OutDoor, JinBoLiftStatus.Up)
+    val downCall = JinBoReq(2, JinBoReqSource.OutDoor, JinBoLiftStatus.Down)
+    runtime.reqs.add(upCall)
+    runtime.reqs.add(downCall)
+
+    JinBoServer.processLift(runtime)
+    JinBoServer.processLift(runtime)
+
+    assertEquals(3.0, runtime.h)
+    assertEquals(JinBoDoorStatus.OPEN, runtime.doors.single().status)
+    assertEquals(JinBoLiftStatus.Up, runtime.direction)
+    assertFalse(runtime.reqs.contains(upCall))
+    assertTrue(runtime.reqs.contains(downCall))
+    assertTrue(runtime.reqs.any { it.destFloor == 4 })
   }
 
   @Test
