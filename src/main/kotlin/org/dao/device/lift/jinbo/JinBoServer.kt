@@ -67,7 +67,9 @@ object JinBoServer {
       lr.doors.forEach { it.advance(now, lr.config) }
 
       // 4. 如果电梯没有在移动，尝试清理当前楼层已经完成服务的请求。
-      if (!lr.isMoving()) JinBoRequestSelector.cleanOpenedFloorReq(lr)
+      if (!lr.isMoving()) {
+        JinBoRequestSelector.cleanOpenedFloorReq(lr, JinBoRequestSelector.currentDirection(lr))
+      }
 
       // 5. 计算当前楼层可服务的请求。
       val currentReqs = JinBoRequestSelector.currentFloorReqs(lr)
@@ -81,18 +83,18 @@ object JinBoServer {
           // 门全关后才能继续移动。
           lr.applyNextDirection(JinBoRequestSelector.selectNextDirection(lr))
 
-          // - 当前高度已有可服务请求时，本帧停靠当前楼层高度；否则继续前进。
-          val stopHeight = lr.config.floors.firstOrNull { it.index == currentReqs.firstOrNull()?.destFloor }?.height
+          // - 计算运行方向上最近的可停靠楼层。
+          val stop = JinBoRequestSelector.nextStop(lr)
 
           // - 推进一帧高度；
-          JinBoMoveService.advance(lr, stopHeight)
+          JinBoMoveService.advance(lr, stop?.floor?.height)
 
           // - 同步经过楼层；
-          // 按本帧结束高度一次性同步最后经过的楼层，容差内视为恰好到层。
-          lr.refreshFloorByH()
+          // 只有高度精确对齐某层时才更新当前楼层。
+          lr.floorForOpening()?.let { lr.curFloor = it }
 
           // - 到达可停楼层后，把 status 设为 Idle 并安排开门。
-          val arrivalDoorCodes = currentReqs.flatMap { it.doorCodes.ifEmpty { listOf(0) } }
+          val arrivalDoorCodes = stop?.let { JinBoRequestSelector.doorCodesAtFloor(lr, it.floor.index, it.direction) }.orEmpty()
           if (arrivalDoorCodes.isNotEmpty()) {
             lr.liftStatus = JinBoLiftStatus.Idle
             lr.lastMoveOn = null
@@ -101,12 +103,11 @@ object JinBoServer {
         }
       } else {
         // 静止时：
-        if (currentReqs.isNotEmpty()) {
+        if (lr.holdAtCurrentFloor()) {
+          // - 门仍在开门、保持或关门过程中：只等待门状态继续演进，不重新开门。
+        } else if (currentReqs.isNotEmpty()) {
           // - 门未开且当前楼层有可服务请求：开门。
           JinBoDoorService.open(lr, currentReqs.flatMap { it.doorCodes.ifEmpty { listOf(0) } })
-        } else if (lr.holdAtCurrentFloor()) {
-          // - 当前楼层没有可服务请求，且门仍处于开门停留/开关门过程中：
-          //   保持当前楼层，等待自动关门延迟结束后再决定下一方向。
         } else {
           // - 当前楼层没有可服务请求，且门已全部关闭：
           //   重新选择方向，更新 status/direction。
