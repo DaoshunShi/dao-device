@@ -115,7 +115,7 @@ class JinBoServerTest {
 
       runtime.reqs.add(request)
       runtime.doors.single().markOpen(Date())
-      JinBoRequestSelector.cleanOpenedFloorReq(runtime, JinBoRequestSelector.currentDirection(runtime))
+      JinBoRequestSelector.cleanOpenedFloorReq(runtime, runtime.currentDirection())
 
       assertEquals(listOf(request), runtime.reqs)
     }

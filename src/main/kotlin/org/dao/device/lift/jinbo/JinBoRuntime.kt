@@ -76,6 +76,10 @@ data class JinBoRuntime(
   /** 电梯是否正在驶向其他楼层；移动中的门操作应被拒绝。 */
   fun isMoving(): Boolean = liftStatus != JinBoLiftStatus.Idle
 
+  /** 当前物理运行方向；移动时取 liftStatus，停靠时取 direction。 */
+  fun currentDirection(): JinBoLiftStatus =
+    if (liftStatus == JinBoLiftStatus.Idle) direction else liftStatus
+
   /** 设置下一运行方向；Idle 时同时清空上次移动时间。 */
   fun applyNextDirection(nextDirection: JinBoLiftStatus) {
     liftStatus = nextDirection

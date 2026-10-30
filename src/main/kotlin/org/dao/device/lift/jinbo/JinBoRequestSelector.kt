@@ -7,7 +7,7 @@ object JinBoRequestSelector {
 
   /** 选择下一运行方向：优先保持当前物理方向，其次反向，最后休息。 */
   fun selectNextDirection(lr: JinBoRuntime): JinBoLiftStatus {
-    val direction = currentDirection(lr)
+    val direction = lr.currentDirection()
     val hasAbove = hasRequestAbove(lr)
     val hasBelow = hasRequestBelow(lr)
 
@@ -35,15 +35,13 @@ object JinBoRequestSelector {
 
   /** 当前楼层可立即服务的呼梯请求；没有时返回空列表。 */
   fun currentFloorReqs(lr: JinBoRuntime): List<JinBoReq> {
-    val direction = currentDirection(lr)
-    return lr.reqs
-      .filter { req -> canServeAtCurrentFloor(lr, req, direction) }
-      .ifEmpty { emptyList() }
+    val floorIndex = lr.floorForOpening() ?: return emptyList()
+    return serviceableReqsAtFloor(lr, floorIndex, lr.currentDirection())
   }
 
   /** 运行方向上最近需要停靠的楼层；没有可停靠请求时返回 null。 */
   fun nextStop(lr: JinBoRuntime): JinBoNextStop? {
-    val direction = currentDirection(lr)
+    val direction = lr.currentDirection()
     val floorsAhead = when (direction) {
       JinBoLiftStatus.Up -> lr.config.floors.asSequence().filter { !it.disabled && it.height >= lr.h - JinBoConstants.FLOOR_EPSILON }
       JinBoLiftStatus.Down -> lr.config.floors.asReversed().asSequence().filter { !it.disabled && it.height <= lr.h + JinBoConstants.FLOOR_EPSILON }
@@ -63,16 +61,14 @@ object JinBoRequestSelector {
 
   /** 精确停靠到 [floorIndex] 后，按 [stopDirection] 可打开的门号；没有可服务请求时返回空列表。 */
   fun doorCodesAtFloor(lr: JinBoRuntime, floorIndex: Int, stopDirection: JinBoLiftStatus): List<Int> {
-    if (lr.floorForOpening() != floorIndex) return emptyList()
-    return lr.reqs
-      .filter { req -> canServeAtFloor(lr, req, floorIndex, stopDirection) }
+    return serviceableReqsAtFloor(lr, floorIndex, stopDirection)
       .flatMap { it.doorCodes.ifEmpty { listOf(0) } }
   }
 
   /** 门已经打开后，清理当前楼层可服务的呼梯请求。 */
   fun cleanOpenedFloorReq(lr: JinBoRuntime, direction: JinBoLiftStatus) {
     val floorIndex = lr.floorForOpening() ?: return
-    val reqs = lr.reqs.filter { req -> canServeAtFloor(lr, req, floorIndex, direction) }.toSet()
+    val reqs = serviceableReqsAtFloor(lr, floorIndex, direction).toSet()
     lr.reqs.removeIf { req ->
       req in reqs &&
         req.doorCodes.ifEmpty { listOf(0) }.all { code ->
@@ -81,17 +77,17 @@ object JinBoRequestSelector {
     }
   }
 
-  private fun canServeAtCurrentFloor(lr: JinBoRuntime, req: JinBoReq, direction: JinBoLiftStatus): Boolean =
-    req.destFloor == lr.floorForOpening() &&
-      (direction == JinBoLiftStatus.Idle || JinBoDirectionHelper.arrivalMatches(lr.config, req, direction))
-
-  private fun canServeAtFloor(lr: JinBoRuntime, req: JinBoReq, floorIndex: Int, direction: JinBoLiftStatus): Boolean =
-    req.destFloor == floorIndex &&
-      lr.floorForOpening() == floorIndex &&
-      (direction == JinBoLiftStatus.Idle || JinBoDirectionHelper.arrivalMatches(lr.config, req, direction))
-
-  fun currentDirection(lr: JinBoRuntime): JinBoLiftStatus =
-    if (lr.liftStatus == JinBoLiftStatus.Idle) lr.direction else lr.liftStatus
+  private fun serviceableReqsAtFloor(
+    lr: JinBoRuntime,
+    floorIndex: Int,
+    direction: JinBoLiftStatus,
+  ): List<JinBoReq> {
+    if (lr.floorForOpening() != floorIndex) return emptyList()
+    return lr.reqs.filter { req ->
+      req.destFloor == floorIndex &&
+        (direction == JinBoLiftStatus.Idle || JinBoDirectionHelper.arrivalMatches(lr.config, req, direction))
+    }
+  }
 
   private fun hasRequestAbove(lr: JinBoRuntime): Boolean = lr.reqs.any { it.destFloor > lr.curFloor }
 

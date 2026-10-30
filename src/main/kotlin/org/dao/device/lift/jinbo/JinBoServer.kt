@@ -68,7 +68,7 @@ object JinBoServer {
 
       // 4. 如果电梯没有在移动，尝试清理当前楼层已经完成服务的请求。
       if (!lr.isMoving()) {
-        JinBoRequestSelector.cleanOpenedFloorReq(lr, JinBoRequestSelector.currentDirection(lr))
+        JinBoRequestSelector.cleanOpenedFloorReq(lr, lr.currentDirection())
       }
 
       // 5. 计算当前楼层可服务的请求。
