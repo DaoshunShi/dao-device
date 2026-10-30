@@ -53,7 +53,7 @@ object JinBoCommandService {
     )
     if (response.code == "0") {
       JinBoRecorder.logEvent(liftId, LiftEvent(req.source.name, reqJson))
-      refreshRequests(liftId)
+      JinBoStateService.publish(liftId, JinBoSnapshot.capture(lift))
     }
     return response
   }
@@ -82,36 +82,25 @@ object JinBoCommandService {
   fun emergencyStop(liftId: String): JinBoResp {
     val lift = mustGetLift(liftId)
     JinBoServer.withLiftLock(lift, "JinBoCommandService.emergencyStop") {
-      if (lift.emc) return JinBoResp()
-      lift.emc = true
-      lift.emcStartedOn = Date()
-      JinBoRecorder.logEvent(liftId, LiftEvent("急停", "$liftId 已进入急停状态"))
+      return tryEmergencyStop(liftId, lift)
     }
-    return JinBoResp()
   }
 
   fun releaseEmergencyStop(liftId: String): JinBoResp {
     val lift = mustGetLift(liftId)
     JinBoServer.withLiftLock(lift, "JinBoCommandService.releaseEmergencyStop") {
-      if (!lift.emc) return JinBoResp()
-      val pausedAt = lift.emcStartedOn
-      val now = Date()
-      if (pausedAt != null) {
-        val offsetMs = now.time - pausedAt.time
-        lift.doors.forEach { it.shiftOperationTimers(offsetMs) }
-      }
-      lift.emc = false
-      lift.emcStartedOn = null
-      lift.lastMoveOn = null
-      JinBoRecorder.logEvent(liftId, LiftEvent("解除急停", "$liftId 已解除急停状态"))
+      return tryReleaseEmergencyStop(liftId, lift)
     }
-    return JinBoResp()
   }
 
   fun toggleEmergencyStop(liftId: String): JinBoResp {
     val lift = mustGetLift(liftId)
     JinBoServer.withLiftLock(lift, "JinBoCommandService.toggleEmergencyStop") {
-      return if (lift.emc) releaseEmergencyStop(liftId) else emergencyStop(liftId)
+      return if (lift.emc) {
+        tryReleaseEmergencyStop(liftId, lift)
+      } else {
+        tryEmergencyStop(liftId, lift)
+      }
     }
   }
 
@@ -182,8 +171,28 @@ object JinBoCommandService {
   private fun mustGetLift(liftId: String): JinBoRuntime =
     JinBoServer.lifts[liftId] ?: throw RuntimeException("$liftId 电梯不存在")
 
-  private fun refreshRequests(liftId: String) {
-    val lift = JinBoServer.lifts[liftId] ?: return
-    JinBoStateService.publish(liftId, JinBoSnapshot.capture(lift))
+  private fun tryEmergencyStop(liftId: String, lift: JinBoRuntime): JinBoResp {
+    if (lift.emc) return JinBoResp()
+
+    lift.emc = true
+    lift.emcStartedOn = Date()
+    JinBoRecorder.logEvent(liftId, LiftEvent("急停", "$liftId 已进入急停状态"))
+    return JinBoResp()
+  }
+
+  private fun tryReleaseEmergencyStop(liftId: String, lift: JinBoRuntime): JinBoResp {
+    if (!lift.emc) return JinBoResp()
+
+    val pausedAt = lift.emcStartedOn
+    val now = Date()
+    if (pausedAt != null) {
+      val offsetMs = now.time - pausedAt.time
+      lift.doors.forEach { it.shiftOperationTimers(offsetMs) }
+    }
+    lift.emc = false
+    lift.emcStartedOn = null
+    lift.lastMoveOn = null
+    JinBoRecorder.logEvent(liftId, LiftEvent("解除急停", "$liftId 已解除急停状态"))
+    return JinBoResp()
   }
 }
